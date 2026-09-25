@@ -18,7 +18,7 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
     * **ONG:** Dosel de absorción de lotes disponibles, apartado con un clic y escáner de recepción.
     * **CEO:** Métricas de sostenibilidad, volumen transferido, beneficiarios directos y $\text{CO}_2\text{e}$ evitado.
     * **Admin TI:** Auditoría y verificación oficial de organizaciones para evitar riesgos de corrupción.
-  * Embudo de control logístico en 3 etapas (`/shipments`): *1. Solicitadas*, *2. En Camino*, *3. Finalizadas*.
+  * Control logístico en 4 etapas (`/shipments`): *Solicitadas*, *Listas para salida*, *En camino* y *Finalizadas*.
   * Mapa geoespacial interactivo (`/map`) adaptado con teselas botánicas y rutas de acopio.
 
 ---
@@ -66,6 +66,17 @@ SQLx CLI y las macros `query!` leen `backend/.env` en el directorio de trabajo. 
 
 Para usar Compose completo, `docker compose up --build` toma `backend/.env` en tiempo de ejecución y conecta el backend al servicio `postgres`. La imagen no contiene el archivo `.env`.
 
+## Frontend local
+
+Desde `frontend/`, usa pnpm y el lockfile versionado:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Con el backend local disponible en `http://localhost:8000`, abre `http://localhost:3000`. Para validar el frontend ejecuta `pnpm lint`, `pnpm exec tsc --noEmit` y `pnpm build`. La aprobación de una solicitud mantiene la donación reservada; la Empresa registra la salida desde `/shipments` y la ONG registra la entrega o el rechazo con motivo.
+
 ---
 
 ## 📁 Estructura del Monorepositorio
@@ -94,7 +105,7 @@ FERXARP/
 │   │   │   ├── (auth)/       # Vistas de autenticación (Login / Registro)
 │   │   │   ├── dashboard/    # Tablero dinámico adaptado según el rol
 │   │   │   ├── map/          # Topografía logística sobre Leaflet
-│   │   │   └── shipments/    # Embudo de envíos y solicitudes en 3 etapas
+│   │   │   └── shipments/    # Control de solicitudes y envíos en 4 etapas
 │   │   ├── components/       # Componentes visuales (GardenGraph, Navbar, etc.)
 │   │   └── lib/api.ts        # Cliente tipado de consumo backend
 │   └── package.json

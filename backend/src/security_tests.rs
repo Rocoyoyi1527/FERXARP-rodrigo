@@ -1952,3 +1952,40 @@ async fn full_http_lifecycle_from_publication_to_delivery() {
         ]
     );
 }
+
+#[tokio::test]
+async fn ong_shipments_show_only_own_requests_with_completion_fields() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ong_user = user(&pool, Role::Ong).await;
+    let other_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ong_user, true).await;
+    let other_ngo = ngo(&pool, other_user, true).await;
+    let own = in_transit_donation(&pool, owner, ngo_id).await;
+    let foreign = in_transit_donation(&pool, owner, other_ngo).await;
+    assert_eq!(
+        scan(&app, own, ong_user, Role::Ong, "entrega", None).await,
+        StatusCode::OK
+    );
+    let (status, shipments) = send(
+        &app,
+        "GET",
+        "/api/donations/shipments",
+        Some(&token(ong_user, Role::Ong)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = shipments.as_array().unwrap();
+    let own_item = items
+        .iter()
+        .find(|item| item["donation_id"] == own.to_string())
+        .unwrap();
+    assert_eq!(own_item["assigned_ngo_id"], ngo_id.to_string());
+    assert!(own_item["completed_at"].as_str().is_some());
+    assert!(
+        !items
+            .iter()
+            .any(|item| item["donation_id"] == foreign.to_string())
+    );
+}

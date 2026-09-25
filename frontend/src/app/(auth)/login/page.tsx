@@ -3,15 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, apiErrorMessage } from "@/lib/api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("contacto@ong-test.com");
-  const [password, setPassword] = useState("super_password_123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,8 +29,8 @@ export default function LoginPage() {
 
       // 3. Redirigir al panel principal
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Credenciales incorrectas o error en el servidor de Rust");
+    } catch (error) {
+      setError(apiErrorMessage(error));
     } finally {
       setLoading(false);
     }

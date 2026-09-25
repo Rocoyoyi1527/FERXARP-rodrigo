@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT \n                    r.id as request_id,\n                    d.id as donation_id,\n                    d.title,\n                    d.description,\n                    d.quantity,\n                    d.status as donation_status,\n                    r.status as request_status,\n                    u.email as donor_email,\n                    n.name as ngo_name,\n                    d.rejection_reason,\n                    r.created_at\n                FROM donation_requests r\n                JOIN donations d ON r.donation_id = d.id\n                JOIN users u ON d.user_id = u.id\n                JOIN ngos n ON r.ngo_id = n.id\n                WHERE n.user_id = $1\n                ORDER BY r.created_at DESC\n                ",
+  "query": "\n                SELECT \n                    r.id as request_id,\n                    d.id as donation_id,\n                    d.title,\n                    d.description,\n                    d.quantity,\n                    d.status as donation_status,\n                    r.status as request_status,\n                    u.email as donor_email,\n                    n.name as ngo_name,\n                    d.assigned_ngo_id,\n                    d.completed_at,\n                    d.rejection_reason,\n                    r.created_at\n                FROM donation_requests r\n                JOIN donations d ON r.donation_id = d.id\n                JOIN users u ON d.user_id = u.id\n                JOIN ngos n ON r.ngo_id = n.id\n                ORDER BY r.created_at DESC\n                ",
   "describe": {
     "columns": [
       {
@@ -104,6 +104,28 @@
       },
       {
         "ordinal": 9,
+        "name": "assigned_ngo_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "assigned_ngo_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "completed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
         "name": "rejection_reason",
         "type_info": "Text",
         "origin": {
@@ -114,7 +136,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -126,9 +148,7 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -141,8 +161,10 @@
       false,
       false,
       true,
+      true,
+      true,
       false
     ]
   },
-  "hash": "0a6e5852e2e512d13e95a66ba53869bbb4d41c163ab0a6b5dc385206481d5b48"
+  "hash": "3bb4c36a332718f227119eb7cb867f061c83266ab095d9d4747d802aacfae62d"
 }

@@ -25,6 +25,7 @@
 }
 
 body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   background-color: var(--color-garden-obsidian);
   color: #e5e7eb;
   min-height: 100vh;

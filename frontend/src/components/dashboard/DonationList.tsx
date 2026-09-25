@@ -1,25 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { DonationItem } from "@/lib/api";
-import { StockScanner } from "@/components/scanner/StockScanner";
+import Link from "next/link";
+import { DonationItem, DonationState } from "@/lib/api";
 
 interface DonationListProps {
   donations: DonationItem[];
   onSelectMatching: (id: string) => void;
-  onRefreshList?: () => void;
 }
 
 export function DonationList({
   donations,
   onSelectMatching,
-  onRefreshList,
 }: DonationListProps) {
-  const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
   const [activeDonationId, setActiveDonationId] = useState<string | null>(null);
 
-  const getStatusBadge = (status?: string | null) => {
+  const getStatusBadge = (status: DonationState) => {
     switch (status) {
+      case "reservado":
+        return <span className="text-[10px] font-mono text-amber-300">Reservado</span>;
       case "en_transito":
         return (
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-950/40 border border-amber-600/50 text-amber-300 flex items-center gap-1">
@@ -34,8 +33,9 @@ export function DonationList({
             Fruto Cosechado
           </span>
         );
+      case "rechazado":
+        return <span className="text-[10px] font-mono text-rose-300">Rechazado</span>;
       case "en_acopio":
-      default:
         return (
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-garden-surface border border-garden-border text-garden-sage flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-garden-leaf/60" />
@@ -66,7 +66,6 @@ export function DonationList({
         <div className="space-y-3">
           {donations.map((d) => {
             const isSelected = activeDonationId === d.id;
-            const isScanning = selectedScanId === d.id;
 
             return (
               <div
@@ -108,23 +107,13 @@ export function DonationList({
                     <span>🌿</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setSelectedScanId(isScanning ? null : d.id)}
+                  <Link
+                    href="/shipments"
                     className="text-[11px] py-1.5 px-3 rounded-lg bg-garden-dark hover:bg-garden-surface text-garden-sage hover:text-white border border-garden-border transition cursor-pointer"
                   >
-                    {isScanning ? "Ocultar" : "Escanear"}
-                  </button>
+                    Ver envíos
+                  </Link>
                 </div>
-
-                {/* Escáner Desplegable */}
-                {isScanning && (
-                  <StockScanner
-                    donationId={d.id}
-                    currentStatus={d.status}
-                    onStatusChanged={onRefreshList}
-                  />
-                )}
               </div>
             );
           })}

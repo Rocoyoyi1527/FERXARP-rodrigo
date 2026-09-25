@@ -1,5 +1,5 @@
 # Etapa 1: Dependencias y construcción
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -18,7 +18,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 # Etapa 2: Servidor en ejecución
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 

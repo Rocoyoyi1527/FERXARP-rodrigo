@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, MapPoint } from "@/lib/api";
+import type { Layer, Map as LeafletMap, Marker } from "leaflet";
 
 export default function MapPage() {
   const router = useRouter();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -80,8 +81,9 @@ export default function MapPage() {
         }
         mapInstanceRef.current = null;
       }
-      if ((mapContainerRef.current as any)._leaflet_id) {
-        delete (mapContainerRef.current as any)._leaflet_id;
+      const mapContainer = mapContainerRef.current as HTMLDivElement & { _leaflet_id?: number };
+      if (mapContainer._leaflet_id) {
+        delete mapContainer._leaflet_id;
       }
 
       const map = L.map(mapContainerRef.current, {
@@ -100,7 +102,7 @@ export default function MapPage() {
       }).addTo(map);
 
       const acopioPoint = points.find((p) => p.point_type === "acopio");
-      const markersGroup: any[] = [];
+      const markersGroup: Marker[] = [];
 
       points.forEach((p) => {
         const isAcopio = p.point_type === "acopio";
@@ -176,10 +178,11 @@ export default function MapPage() {
       isMounted = false;
       if (mapInstanceRef.current) {
         try {
-          mapInstanceRef.current.eachLayer((layer: any) => {
-            mapInstanceRef.current.removeLayer(layer);
+          const map = mapInstanceRef.current;
+          map.eachLayer((layer: Layer) => {
+            map.removeLayer(layer);
           });
-          mapInstanceRef.current.remove();
+          map.remove();
         } catch {
           // Captura silenciosa de desmonte
         }

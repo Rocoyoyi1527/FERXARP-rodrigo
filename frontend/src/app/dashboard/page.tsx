@@ -38,12 +38,26 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    let active = true;
     const token = localStorage.getItem("fexarp_token");
     if (!token) {
       router.push("/login");
     } else {
-      loadInitialData();
+      api.getMe()
+        .then(async (claims) => {
+          const list = claims.role === "empresa" ? await api.listDonations() : [];
+          if (!active) return;
+          setUser(claims);
+          setDonations(list);
+        })
+        .catch(() => {
+          if (!active) return;
+          localStorage.removeItem("fexarp_token");
+          router.push("/login");
+        })
+        .finally(() => { if (active) setLoading(false); });
     }
+    return () => { active = false; };
   }, [router]);
 
   const handleSelectMatching = async (id: string) => {
@@ -92,7 +106,6 @@ export default function DashboardPage() {
               <DonationList
                 donations={donations}
                 onSelectMatching={handleSelectMatching}
-                onRefreshList={loadInitialData}
               />
             </div>
 

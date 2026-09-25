@@ -65,6 +65,8 @@ pub struct ShipmentItem {
     pub request_status: String,
     pub donor_email: String,
     pub ngo_name: String,
+    pub assigned_ngo_id: Option<Uuid>,
+    pub completed_at: Option<DateTime<Utc>>,
     pub rejection_reason: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
 }
@@ -441,6 +443,8 @@ async fn list_shipments(
                     r.status as request_status,
                     u.email as donor_email,
                     n.name as ngo_name,
+                    d.assigned_ngo_id,
+                    d.completed_at,
                     d.rejection_reason,
                     r.created_at
                 FROM donation_requests r
@@ -468,6 +472,8 @@ async fn list_shipments(
                     request_status: r.request_status,
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
+                    assigned_ngo_id: r.assigned_ngo_id,
+                    completed_at: r.completed_at,
                     rejection_reason: r.rejection_reason,
                     created_at: Some(r.created_at),
                 })
@@ -486,6 +492,8 @@ async fn list_shipments(
                     r.status as request_status,
                     u.email as donor_email,
                     n.name as ngo_name,
+                    d.assigned_ngo_id,
+                    d.completed_at,
                     d.rejection_reason,
                     r.created_at
                 FROM donation_requests r
@@ -513,6 +521,8 @@ async fn list_shipments(
                     request_status: r.request_status,
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
+                    assigned_ngo_id: r.assigned_ngo_id,
+                    completed_at: r.completed_at,
                     rejection_reason: r.rejection_reason,
                     created_at: Some(r.created_at),
                 })
@@ -531,6 +541,8 @@ async fn list_shipments(
                     r.status as request_status,
                     u.email as donor_email,
                     n.name as ngo_name,
+                    d.assigned_ngo_id,
+                    d.completed_at,
                     d.rejection_reason,
                     r.created_at
                 FROM donation_requests r
@@ -556,6 +568,8 @@ async fn list_shipments(
                     request_status: r.request_status,
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
+                    assigned_ngo_id: r.assigned_ngo_id,
+                    completed_at: r.completed_at,
                     rejection_reason: r.rejection_reason,
                     created_at: Some(r.created_at),
                 })

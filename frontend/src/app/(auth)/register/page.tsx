@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, apiErrorMessage } from "@/lib/api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -31,8 +31,8 @@ export default function RegisterPage() {
 
       // 3. Redirección al panel principal
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Error al registrar la cuenta");
+    } catch (error) {
+      setError(apiErrorMessage(error));
     } finally {
       setLoading(false);
     }
