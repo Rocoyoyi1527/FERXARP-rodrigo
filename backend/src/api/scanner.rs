@@ -11,7 +11,10 @@ use uuid::Uuid;
 use crate::{
     AppState,
     api::{auth::Claims, middleware::internal_error},
-    models::user::Role,
+    models::{
+        donation_state::{DonationState, PhysicalAction},
+        user::Role,
+    },
 };
 
 #[derive(Deserialize)]
@@ -22,7 +25,7 @@ pub struct ScanRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScanAction {
     Entrada, // Ingreso al centro de acopio
@@ -32,21 +35,23 @@ pub enum ScanAction {
 }
 
 impl ScanAction {
-    pub fn to_status(&self) -> &'static str {
-        match self {
-            ScanAction::Entrada => "en_acopio",
-            ScanAction::Salida => "en_transito",
-            ScanAction::Entrega => "entregado",
-            ScanAction::Rechazo => "rechazado",
-        }
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             ScanAction::Entrada => "entrada",
             ScanAction::Salida => "salida",
             ScanAction::Entrega => "entrega",
             ScanAction::Rechazo => "rechazo",
+        }
+    }
+}
+
+impl From<ScanAction> for PhysicalAction {
+    fn from(action: ScanAction) -> Self {
+        match action {
+            ScanAction::Entrada => Self::Entrada,
+            ScanAction::Salida => Self::Salida,
+            ScanAction::Entrega => Self::Entrega,
+            ScanAction::Rechazo => Self::Rechazo,
         }
     }
 }
@@ -83,7 +88,6 @@ async fn process_scan(
         return Err((StatusCode::FORBIDDEN, "Acceso denegado".to_string()));
     }
 
-    let new_status = payload.action.to_status();
     let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
 
     // 1. Obtener estado previo
@@ -122,24 +126,75 @@ async fn process_scan(
         _ => {}
     }
 
-    // 2. Actualizar donación y registrar fecha de entrega o motivo de rechazo
-    sqlx::query!(
+    let previous = DonationState::from_db(&current.status).ok_or_else(internal_error)?;
+    let next = previous
+        .after_physical_action(payload.action.into())
+        .ok_or((StatusCode::CONFLICT, "Transición no permitida".to_string()))?;
+
+    let reason = if matches!(payload.action, ScanAction::Rechazo) {
+        let value = payload
+            .rejection_reason
+            .as_deref()
+            .unwrap_or_default()
+            .trim();
+        if value.is_empty() || value.chars().count() > 500 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Motivo de rechazo inválido".to_string(),
+            ));
+        }
+        Some(value.to_string())
+    } else {
+        None
+    };
+
+    if matches!(payload.action, ScanAction::Salida) {
+        let ngo_id = current
+            .assigned_ngo_id
+            .ok_or((StatusCode::CONFLICT, "Salida sin ONG aprobada".to_string()))?;
+        let approved = sqlx::query!(
+            "SELECT id FROM donation_requests WHERE donation_id = $1 AND ngo_id = $2 AND status = 'aprobada'",
+            payload.donation_id,
+            ngo_id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| internal_error())?;
+        if approved.is_none() {
+            return Err((
+                StatusCode::CONFLICT,
+                "Salida sin solicitud aprobada".to_string(),
+            ));
+        }
+    }
+
+    if matches!(payload.action, ScanAction::Entrega | ScanAction::Rechazo)
+        && current.assigned_ngo_id.is_none()
+    {
+        return Err((StatusCode::CONFLICT, "Entrega sin ONG asignada".to_string()));
+    }
+
+    let new_status = next.as_str();
+    let updated = sqlx::query!(
         r#"
         UPDATE donations 
         SET status = $1,
-            rejection_reason = CASE WHEN $1 = 'rechazado' THEN $3 ELSE rejection_reason END,
-            completed_at = CASE WHEN $1 = 'entregado' THEN now() ELSE completed_at END
-        WHERE id = $2
+            rejection_reason = $4,
+            completed_at = CASE WHEN $1 IN ('entregado', 'rechazado') THEN now() ELSE NULL END
+        WHERE id = $2 AND status = $3
         "#,
         new_status,
         payload.donation_id,
-        payload.rejection_reason
+        previous.as_str(),
+        reason.as_deref()
     )
     .execute(&mut *tx)
     .await
     .map_err(|_| internal_error())?;
+    if updated.rows_affected() != 1 {
+        return Err((StatusCode::CONFLICT, "Transición no permitida".to_string()));
+    }
 
-    // 3. Registrar auditoría inmutable en delivery_logs (Riesgo R5)
     sqlx::query!(
         r#"
         INSERT INTO delivery_logs (donation_id, action, previous_status, new_status, notes)
@@ -147,9 +202,13 @@ async fn process_scan(
         "#,
         payload.donation_id,
         payload.action.as_str(),
-        current.status,
+        previous.as_str(),
         new_status,
-        payload.notes.or(payload.rejection_reason)
+        if matches!(payload.action, ScanAction::Rechazo) {
+            reason
+        } else {
+            payload.notes
+        }
     )
     .execute(&mut *tx)
     .await
@@ -159,7 +218,7 @@ async fn process_scan(
 
     Ok(Json(ScanResponse {
         donation_id: payload.donation_id,
-        previous_status: current.status,
+        previous_status: Some(current.status),
         new_status: new_status.to_string(),
         message: format!("Lote actualizado a: {}", new_status),
     }))

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM donations WHERE id = $1 FOR UPDATE",
+  "query": "SELECT id FROM donation_requests WHERE donation_id = $1",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "donations",
+            "table": "donation_requests",
             "name": "id"
           }
         }
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "1a36410f343ba52db66e05fac9f244fa4a57b70b00b9dd1a62c1f4da8db7e71e"
+  "hash": "f44c160b1555e48934f22131335333da4e7c3d312a47c1a8f2834e80542b2eeb"
 }

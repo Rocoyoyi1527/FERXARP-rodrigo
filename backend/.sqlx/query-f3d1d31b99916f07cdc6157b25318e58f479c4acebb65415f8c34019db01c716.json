@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE donation_requests\n        SET status = 'aprobada'\n        WHERE id = $1 AND status = 'pendiente'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3d1d31b99916f07cdc6157b25318e58f479c4acebb65415f8c34019db01c716"
+}

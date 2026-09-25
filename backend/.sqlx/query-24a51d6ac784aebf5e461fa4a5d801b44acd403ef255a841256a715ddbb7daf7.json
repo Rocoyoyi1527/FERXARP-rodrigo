@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT assigned_ngo_id FROM donations WHERE id = $1 AND user_id = $2 FOR UPDATE",
+  "query": "SELECT id FROM donation_requests WHERE donation_id = $1 AND ngo_id = $2 AND status = 'aprobada'",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "assigned_ngo_id",
+        "name": "id",
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "donations",
-            "name": "assigned_ngo_id"
+            "table": "donation_requests",
+            "name": "id"
           }
         }
       }
@@ -22,8 +22,8 @@
       ]
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "d000088a098b5c5853a19d7c51e8900d1912f09912a86ab8dae1e935a1f1bc4d"
+  "hash": "24a51d6ac784aebf5e461fa4a5d801b44acd403ef255a841256a715ddbb7daf7"
 }

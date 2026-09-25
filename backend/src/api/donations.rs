@@ -20,7 +20,7 @@ use crate::{
         auth::Claims,
         middleware::{internal_error, require_role},
     },
-    models::user::Role,
+    models::{donation_state::DonationState, user::Role},
 };
 
 // --- ESTRUCTURAS DE DATOS ---
@@ -39,7 +39,7 @@ pub struct DonationResponse {
     pub title: String,
     pub description: Option<String>,
     pub quantity: i32,
-    pub status: Option<String>,
+    pub status: String,
     pub assigned_ngo_id: Option<Uuid>,
 }
 
@@ -120,12 +120,7 @@ async fn create_donation(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error en BD: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     Ok((
         StatusCode::CREATED,
@@ -156,12 +151,7 @@ async fn list_donations(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error en BD: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     let donations = records
         .into_iter()
@@ -190,24 +180,19 @@ async fn list_available_feed(
             d.title, 
             d.description, 
             d.quantity, 
-            COALESCE(d.status, 'en_acopio') as "status!", 
+            d.status,
             d.created_at, 
             u.email as donor_email
         FROM donations d
         JOIN users u ON d.user_id = u.id
-        WHERE d.status = 'en_acopio' OR d.status IS NULL
+        WHERE d.status = 'en_acopio'
         ORDER BY d.created_at DESC
         LIMIT 50
         "#
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error BD: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     let feed = records
         .into_iter()
@@ -353,6 +338,15 @@ async fn request_donation(
 ) -> Result<StatusCode, (StatusCode, String)> {
     require_role(&claims, Role::Ong)?;
     let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
+    // Lock the donation first, matching approval's lock order.
+    let donation = sqlx::query!(
+        "SELECT status, assigned_ngo_id FROM donations WHERE id = $1 FOR UPDATE",
+        donation_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| internal_error())?
+    .ok_or((StatusCode::NOT_FOUND, "Donación no disponible".to_string()))?;
     let ngo = sqlx::query!(
         "SELECT id, is_verified FROM ngos WHERE user_id = $1 FOR UPDATE",
         claims.sub
@@ -365,40 +359,63 @@ async fn request_donation(
         return Err((StatusCode::FORBIDDEN, "ONG no verificada".to_string()));
     }
     let ngo_id = ngo.id;
-    sqlx::query!(
-        "SELECT id FROM donations WHERE id = $1 FOR UPDATE",
+    let status = DonationState::from_db(&donation.status).ok_or_else(internal_error)?;
+    if !status.can_reserve() || donation.assigned_ngo_id.is_some() {
+        return Err((
+            StatusCode::CONFLICT,
+            "Donación no disponible para reserva".to_string(),
+        ));
+    }
+
+    let existing = sqlx::query!(
+        "SELECT id FROM donation_requests WHERE donation_id = $1",
         donation_id
     )
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| internal_error())?
-    .ok_or((StatusCode::NOT_FOUND, "Donación no disponible".to_string()))?;
+    .map_err(|_| internal_error())?;
+    if existing.is_some() {
+        return Err((StatusCode::CONFLICT, "Donación ya solicitada".to_string()));
+    }
 
     sqlx::query!(
         r#"
         INSERT INTO donation_requests (donation_id, ngo_id, status)
         VALUES ($1, $2, 'pendiente')
-        ON CONFLICT (donation_id, ngo_id) DO NOTHING
         "#,
         donation_id,
         ngo_id
     )
     .execute(&mut *tx)
     .await
-    .map_err(|_| internal_error())?;
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|db| db.is_unique_violation())
+        {
+            (StatusCode::CONFLICT, "Donación ya solicitada".to_string())
+        } else {
+            internal_error()
+        }
+    })?;
 
-    sqlx::query!(
+    let updated = sqlx::query!(
         r#"
         UPDATE donations 
-        SET assigned_ngo_id = $1, status = 'reservado' 
-        WHERE id = $2 AND (status = 'en_acopio' OR status IS NULL)
+        SET status = 'reservado'
+        WHERE id = $1 AND status = 'en_acopio' AND assigned_ngo_id IS NULL
         "#,
-        ngo_id,
         donation_id
     )
     .execute(&mut *tx)
     .await
     .map_err(|_| internal_error())?;
+    if updated.rows_affected() != 1 {
+        return Err((
+            StatusCode::CONFLICT,
+            "Donación no disponible para reserva".to_string(),
+        ));
+    }
 
     tx.commit().await.map_err(|_| internal_error())?;
 
@@ -437,12 +454,7 @@ async fn list_shipments(
             )
             .fetch_all(&state.db)
             .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error BD: {}", e),
-                )
-            })?;
+            .map_err(|_| internal_error())?;
 
             records
                 .into_iter()
@@ -452,7 +464,7 @@ async fn list_shipments(
                     title: r.title,
                     description: r.description,
                     quantity: r.quantity,
-                    donation_status: r.donation_status.unwrap_or_else(|| "reservado".to_string()),
+                    donation_status: r.donation_status,
                     request_status: r.request_status,
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
@@ -487,12 +499,7 @@ async fn list_shipments(
             )
             .fetch_all(&state.db)
             .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error BD: {}", e),
-                )
-            })?;
+            .map_err(|_| internal_error())?;
 
             records
                 .into_iter()
@@ -502,7 +509,7 @@ async fn list_shipments(
                     title: r.title,
                     description: r.description,
                     quantity: r.quantity,
-                    donation_status: r.donation_status.unwrap_or_else(|| "reservado".to_string()),
+                    donation_status: r.donation_status,
                     request_status: r.request_status,
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
@@ -535,12 +542,7 @@ async fn list_shipments(
             )
             .fetch_all(&state.db)
             .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error BD: {}", e),
-                )
-            })?;
+            .map_err(|_| internal_error())?;
 
             records
                 .into_iter()
@@ -550,7 +552,7 @@ async fn list_shipments(
                     title: r.title,
                     description: r.description,
                     quantity: r.quantity,
-                    donation_status: r.donation_status.unwrap_or_else(|| "reservado".to_string()),
+                    donation_status: r.donation_status,
                     request_status: r.request_status,
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
@@ -564,7 +566,7 @@ async fn list_shipments(
     Ok(Json(shipments))
 }
 
-// POST /api/donations/{id}/approve - Aprobación de salida
+// POST /api/donations/{id}/approve - Aprobación del donante, sin salida física
 async fn approve_shipment(
     claims: Claims,
     Path(donation_id): Path<Uuid>,
@@ -573,7 +575,7 @@ async fn approve_shipment(
     require_role(&claims, Role::Empresa)?;
     let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
     let donation = sqlx::query!(
-        "SELECT assigned_ngo_id FROM donations WHERE id = $1 AND user_id = $2 FOR UPDATE",
+        "SELECT status, assigned_ngo_id FROM donations WHERE id = $1 AND user_id = $2 FOR UPDATE",
         donation_id,
         claims.sub
     )
@@ -581,48 +583,62 @@ async fn approve_shipment(
     .await
     .map_err(|_| internal_error())?
     .ok_or((StatusCode::NOT_FOUND, "Donación no disponible".to_string()))?;
-    let assigned_ngo_id = donation
-        .assigned_ngo_id
-        .ok_or((StatusCode::NOT_FOUND, "Solicitud no disponible".to_string()))?;
+    let status = DonationState::from_db(&donation.status).ok_or_else(internal_error)?;
+    if !status.can_approve() {
+        return Err((
+            StatusCode::CONFLICT,
+            "Donación fuera de estado reservado".to_string(),
+        ));
+    }
+
+    let request = sqlx::query!(
+        r#"
+        SELECT r.id, r.ngo_id, r.status, n.is_verified
+        FROM donation_requests r
+        JOIN ngos n ON n.id = r.ngo_id
+        WHERE r.donation_id = $1
+        FOR UPDATE OF r, n
+        "#,
+        donation_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| internal_error())?
+    .ok_or((StatusCode::NOT_FOUND, "Solicitud no disponible".to_string()))?;
+    if request.status != "pendiente" || !request.is_verified || donation.assigned_ngo_id.is_some() {
+        return Err((StatusCode::CONFLICT, "Solicitud no aprobable".to_string()));
+    }
 
     let updated = sqlx::query!(
         r#"
-        UPDATE donation_requests 
-        SET status = 'aprobada' 
-        WHERE donation_id = $1 AND ngo_id = $2
+        UPDATE donation_requests
+        SET status = 'aprobada'
+        WHERE id = $1 AND status = 'pendiente'
         "#,
-        donation_id,
-        assigned_ngo_id
+        request.id
     )
     .execute(&mut *tx)
     .await
     .map_err(|_| internal_error())?;
-    if updated.rows_affected() == 0 {
-        return Err((StatusCode::NOT_FOUND, "Solicitud no disponible".to_string()));
+    if updated.rows_affected() != 1 {
+        return Err((StatusCode::CONFLICT, "Solicitud no aprobable".to_string()));
     }
 
-    sqlx::query!(
+    let updated = sqlx::query!(
         r#"
-        UPDATE donations 
-        SET status = 'en_transito' 
-        WHERE id = $1
+        UPDATE donations
+        SET assigned_ngo_id = $1
+        WHERE id = $2 AND status = 'reservado' AND assigned_ngo_id IS NULL
         "#,
+        request.ngo_id,
         donation_id
     )
     .execute(&mut *tx)
     .await
     .map_err(|_| internal_error())?;
-
-    sqlx::query!(
-        r#"
-        INSERT INTO delivery_logs (donation_id, action, previous_status, new_status, notes)
-        VALUES ($1, 'salida', 'reservado', 'en_transito', 'Despacho autorizado por la empresa donante')
-        "#,
-        donation_id
-    )
-    .execute(&mut *tx)
-    .await
-    .map_err(|_| internal_error())?;
+    if updated.rows_affected() != 1 {
+        return Err((StatusCode::CONFLICT, "Donación no aprobable".to_string()));
+    }
 
     tx.commit().await.map_err(|_| internal_error())?;
 

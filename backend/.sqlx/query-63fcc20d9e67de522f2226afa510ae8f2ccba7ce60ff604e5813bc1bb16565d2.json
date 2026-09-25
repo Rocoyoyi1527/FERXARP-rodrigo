@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE donations \n        SET status = 'reservado'\n        WHERE id = $1 AND status = 'en_acopio' AND assigned_ngo_id IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "63fcc20d9e67de522f2226afa510ae8f2ccba7ce60ff604e5813bc1bb16565d2"
+}

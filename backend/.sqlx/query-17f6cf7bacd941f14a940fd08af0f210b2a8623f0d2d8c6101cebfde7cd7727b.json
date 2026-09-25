@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT \n            d.id, \n            d.title, \n            d.description, \n            d.quantity, \n            COALESCE(d.status, 'en_acopio') as \"status!\", \n            d.created_at, \n            u.email as donor_email\n        FROM donations d\n        JOIN users u ON d.user_id = u.id\n        WHERE d.status = 'en_acopio' OR d.status IS NULL\n        ORDER BY d.created_at DESC\n        LIMIT 50\n        ",
+  "query": "\n        SELECT \n            d.id, \n            d.title, \n            d.description, \n            d.quantity, \n            d.status,\n            d.created_at, \n            u.email as donor_email\n        FROM donations d\n        JOIN users u ON d.user_id = u.id\n        WHERE d.status = 'en_acopio'\n        ORDER BY d.created_at DESC\n        LIMIT 50\n        ",
   "describe": {
     "columns": [
       {
@@ -49,9 +49,14 @@
       },
       {
         "ordinal": 4,
-        "name": "status!",
+        "name": "status",
         "type_info": "Text",
-        "origin": "Expression"
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "status"
+          }
+        }
       },
       {
         "ordinal": 5,
@@ -84,10 +89,10 @@
       false,
       true,
       false,
-      null,
+      false,
       false,
       false
     ]
   },
-  "hash": "65477870d08c4876c6f8999e18f86333dd04cc95d8faaf476550250572940c48"
+  "hash": "17f6cf7bacd941f14a940fd08af0f210b2a8623f0d2d8c6101cebfde7cd7727b"
 }

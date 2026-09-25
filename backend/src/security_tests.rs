@@ -83,14 +83,15 @@ async fn pool() -> PgPool {
 
 async fn app() -> (Router, PgPool) {
     let pool = pool().await;
-    (
-        super::build_router(Arc::new(AppState {
-            db: pool.clone(),
-            jwt_secret: SECRET.to_string(),
-            seed_password: None,
-        })),
-        pool,
-    )
+    (router_for(&pool), pool)
+}
+
+fn router_for(pool: &PgPool) -> Router {
+    super::build_router(Arc::new(AppState {
+        db: pool.clone(),
+        jwt_secret: SECRET.to_string(),
+        seed_password: None,
+    }))
 }
 
 async fn send(
@@ -176,6 +177,82 @@ async fn request(pool: &PgPool, donation_id: Uuid, ngo_id: Uuid) {
         .execute(pool)
         .await
         .unwrap();
+}
+
+async fn reserved_donation(pool: &PgPool, owner: Uuid, ngo_id: Uuid) -> Uuid {
+    let id = donation(pool, owner, None).await;
+    request(pool, id, ngo_id).await;
+    sqlx::query("UPDATE donations SET status = 'reservado' WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    id
+}
+
+async fn approved_reserved_donation(pool: &PgPool, owner: Uuid, ngo_id: Uuid) -> Uuid {
+    let id = reserved_donation(pool, owner, ngo_id).await;
+    sqlx::query("UPDATE donation_requests SET status = 'aprobada' WHERE donation_id = $1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE donations SET assigned_ngo_id = $1 WHERE id = $2")
+        .bind(ngo_id)
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    id
+}
+
+async fn in_transit_donation(pool: &PgPool, owner: Uuid, ngo_id: Uuid) -> Uuid {
+    let id = approved_reserved_donation(pool, owner, ngo_id).await;
+    sqlx::query("UPDATE donations SET status = 'en_transito' WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    id
+}
+
+async fn donation_state(pool: &PgPool, id: Uuid) -> (String, Option<Uuid>, Option<String>, bool) {
+    sqlx::query_as(
+        "SELECT status, assigned_ngo_id, rejection_reason, completed_at IS NOT NULL FROM donations WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn log_count(pool: &PgPool, id: Uuid) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM delivery_logs WHERE donation_id = $1")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn scan(
+    app: &Router,
+    id: Uuid,
+    user_id: Uuid,
+    role: Role,
+    action: &str,
+    reason: Option<&str>,
+) -> StatusCode {
+    send(
+        app,
+        "POST",
+        "/api/scanner/scan",
+        Some(&token(user_id, role)),
+        Some(json!({
+            "donation_id": id, "action": action, "rejection_reason": reason
+        })),
+    )
+    .await
+    .0
 }
 
 #[tokio::test]
@@ -395,8 +472,7 @@ async fn don_01_owner_can_approve_request() {
     let owner = user(&pool, Role::Empresa).await;
     let ong_user = user(&pool, Role::Ong).await;
     let ngo_id = ngo(&pool, ong_user, true).await;
-    let donation = donation(&pool, owner, Some(ngo_id)).await;
-    request(&pool, donation, ngo_id).await;
+    let donation = reserved_donation(&pool, owner, ngo_id).await;
     assert_eq!(
         send(
             &app,
@@ -416,6 +492,12 @@ async fn don_01_owner_can_approve_request() {
         .unwrap()
         .get("status");
     assert_eq!(status, "aprobada");
+    let donation_status: String = sqlx::query_scalar("SELECT status FROM donations WHERE id = $1")
+        .bind(donation)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(donation_status, "reservado");
 }
 
 #[tokio::test]
@@ -426,9 +508,18 @@ async fn don_approval_updates_only_assigned_ngo_request() {
     let other_user = user(&pool, Role::Ong).await;
     let assigned = ngo(&pool, assigned_user, true).await;
     let other = ngo(&pool, other_user, true).await;
-    let donation = donation(&pool, owner, Some(assigned)).await;
-    request(&pool, donation, assigned).await;
-    request(&pool, donation, other).await;
+    let donation = reserved_donation(&pool, owner, assigned).await;
+    let second = sqlx::query("INSERT INTO donation_requests (donation_id, ngo_id) VALUES ($1, $2)")
+        .bind(donation)
+        .bind(other)
+        .execute(&pool)
+        .await;
+    assert!(
+        second
+            .unwrap_err()
+            .as_database_error()
+            .is_some_and(|error| error.is_unique_violation())
+    );
     assert_eq!(
         send(
             &app,
@@ -441,15 +532,13 @@ async fn don_approval_updates_only_assigned_ngo_request() {
         .0,
         StatusCode::OK
     );
-    let other_status: String =
-        sqlx::query("SELECT status FROM donation_requests WHERE donation_id = $1 AND ngo_id = $2")
+    let approved: (Uuid, String) =
+        sqlx::query_as("SELECT ngo_id, status FROM donation_requests WHERE donation_id = $1")
             .bind(donation)
-            .bind(other)
             .fetch_one(&pool)
             .await
-            .unwrap()
-            .get("status");
-    assert_eq!(other_status, "pendiente");
+            .unwrap();
+    assert_eq!(approved, (assigned, "aprobada".to_string()));
 }
 
 #[tokio::test]
@@ -459,8 +548,7 @@ async fn don_02_foreign_company_cannot_approve() {
     let foreign = user(&pool, Role::Empresa).await;
     let ong_user = user(&pool, Role::Ong).await;
     let ngo_id = ngo(&pool, ong_user, true).await;
-    let donation = donation(&pool, owner, Some(ngo_id)).await;
-    request(&pool, donation, ngo_id).await;
+    let donation = reserved_donation(&pool, owner, ngo_id).await;
     assert_eq!(
         send(
             &app,
@@ -487,6 +575,11 @@ async fn don_03_ong_and_ceo_cannot_approve() {
     let (app, pool) = app().await;
     let owner = user(&pool, Role::Empresa).await;
     let donation = donation(&pool, owner, None).await;
+    sqlx::query("UPDATE donations SET status = 'reservado' WHERE id = $1")
+        .bind(donation)
+        .execute(&pool)
+        .await
+        .unwrap();
     for role in [Role::Ong, Role::Ceo, Role::Admin] {
         let id = user(&pool, role.clone()).await;
         assert_eq!(
@@ -520,7 +613,7 @@ async fn don_missing_request_is_controlled() {
         )
         .await
         .0,
-        StatusCode::NOT_FOUND
+        StatusCode::CONFLICT
     );
     assert_eq!(
         send(
@@ -543,14 +636,14 @@ async fn scan_01_assigned_ngo_can_deliver_or_reject() {
     let ngo_user = user(&pool, Role::Ong).await;
     let ngo_id = ngo(&pool, ngo_user, true).await;
     for action in ["entrega", "rechazo"] {
-        let donation = donation(&pool, owner, Some(ngo_id)).await;
+        let donation = in_transit_donation(&pool, owner, ngo_id).await;
         assert_eq!(
             send(
                 &app,
                 "POST",
                 "/api/scanner/scan",
                 Some(&token(ngo_user, Role::Ong)),
-                Some(json!({"donation_id": donation, "action": action}))
+                Some(json!({"donation_id": donation, "action": action, "rejection_reason": "Daño físico"}))
             )
             .await
             .0,
@@ -567,7 +660,7 @@ async fn scan_02_foreign_ngo_cannot_modify() {
     let assigned = ngo(&pool, assigned_user, true).await;
     let foreign = user(&pool, Role::Ong).await;
     let _ = ngo(&pool, foreign, true).await;
-    let donation = donation(&pool, owner, Some(assigned)).await;
+    let donation = in_transit_donation(&pool, owner, assigned).await;
     assert_eq!(
         send(
             &app,
@@ -587,7 +680,9 @@ async fn scan_03_foreign_company_cannot_modify() {
     let (app, pool) = app().await;
     let owner = user(&pool, Role::Empresa).await;
     let foreign = user(&pool, Role::Empresa).await;
-    let donation = donation(&pool, owner, None).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let donation = approved_reserved_donation(&pool, owner, ngo_id).await;
     assert_eq!(
         send(
             &app,
@@ -609,7 +704,9 @@ async fn scan_owner_wrong_role_and_admin_override() {
     let ceo = user(&pool, Role::Ceo).await;
     let ong_user = user(&pool, Role::Ong).await;
     let admin = user(&pool, Role::Admin).await;
-    let donation = donation(&pool, owner, None).await;
+    let assigned_user = user(&pool, Role::Ong).await;
+    let assigned = ngo(&pool, assigned_user, true).await;
+    let donation = approved_reserved_donation(&pool, owner, assigned).await;
     let body = json!({"donation_id": donation, "action": "salida"});
     assert_eq!(
         send(
@@ -641,7 +738,20 @@ async fn scan_owner_wrong_role_and_admin_override() {
             "POST",
             "/api/scanner/scan",
             Some(&token(admin, Role::Admin)),
-            Some(body)
+            Some(body.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let admin_donation = approved_reserved_donation(&pool, owner, assigned).await;
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            "/api/scanner/scan",
+            Some(&token(admin, Role::Admin)),
+            Some(json!({"donation_id": admin_donation, "action": "salida"}))
         )
         .await
         .0,
@@ -1103,5 +1213,742 @@ async fn admin_boot_enables_initial_donation_chain_without_manual_database_edits
         .await
         .0,
         StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn flow_01_02_03_creation_reservation_and_second_request() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let first_user = user(&pool, Role::Ong).await;
+    let second_user = user(&pool, Role::Ong).await;
+    let first = ngo(&pool, first_user, true).await;
+    let _second = ngo(&pool, second_user, true).await;
+    let (status, created) = send(
+        &app,
+        "POST",
+        "/api/donations",
+        Some(&token(owner, Role::Empresa)),
+        Some(json!({"title":"Food", "quantity":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created["status"], "en_acopio");
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/donations/{id}/request"),
+            Some(&token(first_user, Role::Ong)),
+            None
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        donation_state(&pool, id).await,
+        ("reservado".into(), None, None, false)
+    );
+    let actual: (Uuid, String) =
+        sqlx::query_as("SELECT ngo_id, status FROM donation_requests WHERE donation_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(actual, (first, "pendiente".into()));
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/donations/{id}/request"),
+            Some(&token(second_user, Role::Ong)),
+            None
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM donation_requests WHERE donation_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(log_count(&pool, id).await, 0);
+}
+
+#[tokio::test]
+async fn flow_04_05_approval_and_physical_departure_are_distinct() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = reserved_donation(&pool, owner, ngo_id).await;
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/donations/{id}/approve"),
+            Some(&token(owner, Role::Empresa)),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        donation_state(&pool, id).await,
+        ("reservado".into(), Some(ngo_id), None, false)
+    );
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM donation_requests WHERE donation_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "aprobada");
+    assert_eq!(log_count(&pool, id).await, 0);
+    assert_eq!(
+        scan(&app, id, owner, Role::Empresa, "salida", None).await,
+        StatusCode::OK
+    );
+    assert_eq!(donation_state(&pool, id).await.0, "en_transito");
+    let log: (String, Option<String>, String) = sqlx::query_as(
+        "SELECT action, previous_status, new_status FROM delivery_logs WHERE donation_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        log,
+        (
+            "salida".into(),
+            Some("reservado".into()),
+            "en_transito".into()
+        )
+    );
+    assert_eq!(log_count(&pool, id).await, 1);
+}
+
+#[tokio::test]
+async fn flow_06_departure_without_approved_request_conflicts_without_log() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = reserved_donation(&pool, owner, ngo_id).await;
+    assert_eq!(
+        scan(&app, id, owner, Role::Empresa, "salida", None).await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(donation_state(&pool, id).await.0, "reservado");
+    assert_eq!(log_count(&pool, id).await, 0);
+}
+
+#[tokio::test]
+async fn flow_07_delivery_sets_completion_and_one_correct_log() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = in_transit_donation(&pool, owner, ngo_id).await;
+    assert_eq!(
+        scan(&app, id, ngo_user, Role::Ong, "entrega", None).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        donation_state(&pool, id).await,
+        ("entregado".into(), Some(ngo_id), None, true)
+    );
+    let log: (String, Option<String>, String) = sqlx::query_as(
+        "SELECT action, previous_status, new_status FROM delivery_logs WHERE donation_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        log,
+        (
+            "entrega".into(),
+            Some("en_transito".into()),
+            "entregado".into()
+        )
+    );
+    assert_eq!(log_count(&pool, id).await, 1);
+}
+
+#[tokio::test]
+async fn flow_08_09_rejection_requires_nonempty_reason_and_logs_once() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = in_transit_donation(&pool, owner, ngo_id).await;
+    for reason in [None, Some("  ")] {
+        assert_eq!(
+            scan(&app, id, ngo_user, Role::Ong, "rechazo", reason).await,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(donation_state(&pool, id).await.0, "en_transito");
+        assert_eq!(log_count(&pool, id).await, 0);
+    }
+    assert_eq!(
+        scan(
+            &app,
+            id,
+            ngo_user,
+            Role::Ong,
+            "rechazo",
+            Some("  Daño físico  ")
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        donation_state(&pool, id).await,
+        (
+            "rechazado".into(),
+            Some(ngo_id),
+            Some("Daño físico".into()),
+            true
+        )
+    );
+    let log: (String, Option<String>, String, Option<String>) = sqlx::query_as("SELECT action, previous_status, new_status, notes FROM delivery_logs WHERE donation_id = $1").bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        log,
+        (
+            "rechazo".into(),
+            Some("en_transito".into()),
+            "rechazado".into(),
+            Some("Daño físico".into())
+        )
+    );
+    assert_eq!(log_count(&pool, id).await, 1);
+}
+
+#[tokio::test]
+async fn flow_10_15_invalid_and_repeated_transitions_never_log() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let fresh = donation(&pool, owner, Some(ngo_id)).await;
+    assert_eq!(
+        scan(&app, fresh, owner, Role::Empresa, "entrada", None).await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        scan(&app, fresh, owner, Role::Empresa, "salida", None).await,
+        StatusCode::CONFLICT
+    );
+    for action in ["entrega", "rechazo"] {
+        assert_eq!(
+            scan(&app, fresh, ngo_user, Role::Ong, action, Some("reason")).await,
+            StatusCode::CONFLICT
+        );
+    }
+    assert_eq!(log_count(&pool, fresh).await, 0);
+    let reserved = approved_reserved_donation(&pool, owner, ngo_id).await;
+    for action in ["entrega", "rechazo"] {
+        assert_eq!(
+            scan(&app, reserved, ngo_user, Role::Ong, action, Some("reason")).await,
+            StatusCode::CONFLICT
+        );
+    }
+    assert_eq!(
+        scan(&app, reserved, owner, Role::Empresa, "entrada", None).await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(log_count(&pool, reserved).await, 0);
+    let delivered = in_transit_donation(&pool, owner, ngo_id).await;
+    assert_eq!(
+        scan(&app, delivered, ngo_user, Role::Ong, "entrega", None).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        scan(&app, delivered, ngo_user, Role::Ong, "entrega", None).await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        scan(
+            &app,
+            delivered,
+            ngo_user,
+            Role::Ong,
+            "rechazo",
+            Some("reason")
+        )
+        .await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        scan(&app, delivered, owner, Role::Empresa, "entrada", None).await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(log_count(&pool, delivered).await, 1);
+    let rejected = in_transit_donation(&pool, owner, ngo_id).await;
+    assert_eq!(
+        scan(
+            &app,
+            rejected,
+            ngo_user,
+            Role::Ong,
+            "rechazo",
+            Some("reason")
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        scan(&app, rejected, ngo_user, Role::Ong, "entrega", None).await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        scan(
+            &app,
+            rejected,
+            ngo_user,
+            Role::Ong,
+            "rechazo",
+            Some("reason")
+        )
+        .await,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(log_count(&pool, rejected).await, 1);
+}
+
+#[tokio::test]
+async fn conc_01_two_ngos_race_to_reserve_exactly_one_wins() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let first = user(&pool, Role::Ong).await;
+    let second = user(&pool, Role::Ong).await;
+    let _ = ngo(&pool, first, true).await;
+    let _ = ngo(&pool, second, true).await;
+    let id = donation(&pool, owner, None).await;
+    let uri = format!("/api/donations/{id}/request");
+    let first_token = token(first, Role::Ong);
+    let second_token = token(second, Role::Ong);
+    let (a, b) = tokio::join!(
+        send(&app, "POST", &uri, Some(&first_token), None),
+        send(&app, "POST", &uri, Some(&second_token), None)
+    );
+    let mut statuses = [a.0, b.0];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::CREATED, StatusCode::CONFLICT]);
+    assert_eq!(donation_state(&pool, id).await.0, "reservado");
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM donation_requests WHERE donation_id = $1 AND status = 'pendiente'",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn conc_02_two_approvals_change_request_once() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = reserved_donation(&pool, owner, ngo_id).await;
+    let uri = format!("/api/donations/{id}/approve");
+    let auth = token(owner, Role::Empresa);
+    let (a, b) = tokio::join!(
+        send(&app, "POST", &uri, Some(&auth), None),
+        send(&app, "POST", &uri, Some(&auth), None)
+    );
+    let mut statuses = [a.0, b.0];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CONFLICT]);
+    assert_eq!(
+        donation_state(&pool, id).await,
+        ("reservado".into(), Some(ngo_id), None, false)
+    );
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM donation_requests WHERE donation_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "aprobada");
+    assert_eq!(log_count(&pool, id).await, 0);
+}
+
+#[tokio::test]
+async fn conc_03_two_departures_produce_one_transition_and_log() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = approved_reserved_donation(&pool, owner, ngo_id).await;
+    let (a, b) = tokio::join!(
+        scan(&app, id, owner, Role::Empresa, "salida", None),
+        scan(&app, id, owner, Role::Empresa, "salida", None)
+    );
+    let mut statuses = [a, b];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CONFLICT]);
+    assert_eq!(donation_state(&pool, id).await.0, "en_transito");
+    assert_eq!(log_count(&pool, id).await, 1);
+}
+
+#[tokio::test]
+async fn conc_04_delivery_and_rejection_race_to_one_terminal_result() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let id = in_transit_donation(&pool, owner, ngo_id).await;
+    let (a, b) = tokio::join!(
+        scan(&app, id, ngo_user, Role::Ong, "entrega", None),
+        scan(&app, id, ngo_user, Role::Ong, "rechazo", Some("Damaged"))
+    );
+    let mut statuses = [a, b];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CONFLICT]);
+    let (state, _, reason, completed) = donation_state(&pool, id).await;
+    assert!(completed);
+    assert!(matches!(state.as_str(), "entregado" | "rechazado"));
+    assert_eq!(reason.is_some(), state == "rechazado");
+    assert_eq!(log_count(&pool, id).await, 1);
+    let logged: String =
+        sqlx::query_scalar("SELECT new_status FROM delivery_logs WHERE donation_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(logged, state);
+}
+
+#[tokio::test]
+async fn rollback_request_approval_and_scan_leave_no_partial_writes_and_logs_are_immutable() {
+    let options = local_options();
+    let bootstrap = PgPoolOptions::new()
+        .connect_with(options.clone())
+        .await
+        .unwrap();
+    let name = format!("ferxarp_lifecycle_{}", Uuid::new_v4().simple());
+    sqlx::query(AssertSqlSafe(format!("CREATE DATABASE {name}")))
+        .execute(&bootstrap)
+        .await
+        .unwrap();
+    let isolated = PgPoolOptions::new()
+        .max_connections(3)
+        .connect_with(options.database(&name))
+        .await
+        .unwrap();
+    sqlx::migrate!("./migrations").run(&isolated).await.unwrap();
+    let app = router_for(&isolated);
+    let owner = user(&isolated, Role::Empresa).await;
+    let ngo_user = user(&isolated, Role::Ong).await;
+    let ngo_id = ngo(&isolated, ngo_user, true).await;
+
+    sqlx::query("CREATE FUNCTION fail_lifecycle_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected rollback failure'; END $$")
+        .execute(&isolated).await.unwrap();
+    sqlx::query("CREATE TRIGGER fail_donation_update BEFORE UPDATE ON donations FOR EACH ROW EXECUTE FUNCTION fail_lifecycle_write()")
+        .execute(&isolated).await.unwrap();
+    let request_id = donation(&isolated, owner, None).await;
+    let (status, response) = send(
+        &app,
+        "POST",
+        &format!("/api/donations/{request_id}/request"),
+        Some(&token(ngo_user, Role::Ong)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!response.to_string().contains("injected rollback failure"));
+    assert_eq!(donation_state(&isolated, request_id).await.0, "en_acopio");
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM donation_requests WHERE donation_id = $1")
+            .bind(request_id)
+            .fetch_one(&isolated)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+    sqlx::query("DROP TRIGGER fail_donation_update ON donations")
+        .execute(&isolated)
+        .await
+        .unwrap();
+
+    let approval_id = reserved_donation(&isolated, owner, ngo_id).await;
+    sqlx::query("CREATE TRIGGER fail_donation_update BEFORE UPDATE ON donations FOR EACH ROW EXECUTE FUNCTION fail_lifecycle_write()")
+        .execute(&isolated).await.unwrap();
+    let (status, response) = send(
+        &app,
+        "POST",
+        &format!("/api/donations/{approval_id}/approve"),
+        Some(&token(owner, Role::Empresa)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!response.to_string().contains("injected rollback failure"));
+    assert_eq!(
+        donation_state(&isolated, approval_id).await,
+        ("reservado".into(), None, None, false)
+    );
+    let request_status: String =
+        sqlx::query_scalar("SELECT status FROM donation_requests WHERE donation_id = $1")
+            .bind(approval_id)
+            .fetch_one(&isolated)
+            .await
+            .unwrap();
+    assert_eq!(request_status, "pendiente");
+    sqlx::query("DROP TRIGGER fail_donation_update ON donations")
+        .execute(&isolated)
+        .await
+        .unwrap();
+
+    let scan_id = approved_reserved_donation(&isolated, owner, ngo_id).await;
+    sqlx::query("CREATE TRIGGER fail_log_insert BEFORE INSERT ON delivery_logs FOR EACH ROW EXECUTE FUNCTION fail_lifecycle_write()")
+        .execute(&isolated).await.unwrap();
+    let (status, response) = send(
+        &app,
+        "POST",
+        "/api/scanner/scan",
+        Some(&token(owner, Role::Empresa)),
+        Some(json!({"donation_id":scan_id,"action":"salida"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!response.to_string().contains("injected rollback failure"));
+    assert_eq!(donation_state(&isolated, scan_id).await.0, "reservado");
+    assert_eq!(log_count(&isolated, scan_id).await, 0);
+    sqlx::query("DROP TRIGGER fail_log_insert ON delivery_logs")
+        .execute(&isolated)
+        .await
+        .unwrap();
+    assert_eq!(
+        scan(&app, scan_id, owner, Role::Empresa, "salida", None).await,
+        StatusCode::OK
+    );
+    let log_id: Uuid = sqlx::query_scalar("SELECT id FROM delivery_logs WHERE donation_id = $1")
+        .bind(scan_id)
+        .fetch_one(&isolated)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("UPDATE delivery_logs SET notes = 'tamper' WHERE id = $1")
+            .bind(log_id)
+            .execute(&isolated)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("DELETE FROM delivery_logs WHERE id = $1")
+            .bind(log_id)
+            .execute(&isolated)
+            .await
+            .is_err()
+    );
+    assert_eq!(log_count(&isolated, scan_id).await, 1);
+
+    isolated.close().await;
+    sqlx::query(AssertSqlSafe(format!("DROP DATABASE {name} WITH (FORCE)")))
+        .execute(&bootstrap)
+        .await
+        .unwrap();
+    bootstrap.close().await;
+}
+
+#[tokio::test]
+async fn migration_upgrades_ferxarp_001_rows_and_archives_duplicate_requests() {
+    let options = local_options();
+    let bootstrap = PgPoolOptions::new()
+        .connect_with(options.clone())
+        .await
+        .unwrap();
+    let name = format!("ferxarp_upgrade_{}", Uuid::new_v4().simple());
+    sqlx::query(AssertSqlSafe(format!("CREATE DATABASE {name}")))
+        .execute(&bootstrap)
+        .await
+        .unwrap();
+    let isolated = PgPoolOptions::new()
+        .connect_with(options.database(&name))
+        .await
+        .unwrap();
+    let all = sqlx::migrate!("./migrations");
+    let first = sqlx::migrate::Migrator::with_migrations(vec![all.migrations[0].clone()]);
+    first.run(&isolated).await.unwrap();
+    let owner = user(&isolated, Role::Empresa).await;
+    let ngo_user_a = user(&isolated, Role::Ong).await;
+    let ngo_user_b = user(&isolated, Role::Ong).await;
+    let ngo_a = ngo(&isolated, ngo_user_a, true).await;
+    let ngo_b = ngo(&isolated, ngo_user_b, true).await;
+    let id: Uuid = sqlx::query_scalar("INSERT INTO donations (user_id, title, quantity, status, assigned_ngo_id) VALUES ($1, 'legacy', 1, 'en_transito', $2) RETURNING id")
+        .bind(owner).bind(ngo_a).fetch_one(&isolated).await.unwrap();
+    request(&isolated, id, ngo_a).await;
+    request(&isolated, id, ngo_b).await;
+    sqlx::query(
+        "UPDATE donation_requests SET status = 'aprobada' WHERE donation_id = $1 AND ngo_id = $2",
+    )
+    .bind(id)
+    .bind(ngo_b)
+    .execute(&isolated)
+    .await
+    .unwrap();
+    let null_id: Uuid = sqlx::query_scalar("INSERT INTO donations (user_id, title, quantity, status) VALUES ($1, 'null state', 1, NULL) RETURNING id")
+        .bind(owner).fetch_one(&isolated).await.unwrap();
+    let rejected_id: Uuid = sqlx::query_scalar("INSERT INTO donations (user_id, title, quantity, status) VALUES ($1, 'old rejection', 1, 'rechazado') RETURNING id")
+        .bind(owner).fetch_one(&isolated).await.unwrap();
+    all.run(&isolated).await.unwrap();
+    assert_eq!(
+        donation_state(&isolated, id).await,
+        ("en_transito".into(), Some(ngo_b), None, false)
+    );
+    assert_eq!(donation_state(&isolated, null_id).await.0, "en_acopio");
+    let (_, _, reason, completed) = donation_state(&isolated, rejected_id).await;
+    assert!(completed);
+    assert!(reason.unwrap().contains("históricos"));
+    let retained: Uuid =
+        sqlx::query_scalar("SELECT ngo_id FROM donation_requests WHERE donation_id = $1")
+            .bind(id)
+            .fetch_one(&isolated)
+            .await
+            .unwrap();
+    assert_eq!(retained, ngo_b);
+    let archived: Uuid = sqlx::query_scalar(
+        "SELECT ngo_id FROM donation_request_duplicates_archive WHERE donation_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&isolated)
+    .await
+    .unwrap();
+    assert_eq!(archived, ngo_a);
+    assert!(
+        sqlx::query("INSERT INTO donation_requests (donation_id, ngo_id) VALUES ($1, $2)")
+            .bind(id)
+            .bind(ngo_a)
+            .execute(&isolated)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("UPDATE donations SET status = NULL WHERE id = $1")
+            .bind(null_id)
+            .execute(&isolated)
+            .await
+            .is_err()
+    );
+    isolated.close().await;
+    sqlx::query(AssertSqlSafe(format!("DROP DATABASE {name} WITH (FORCE)")))
+        .execute(&bootstrap)
+        .await
+        .unwrap();
+    bootstrap.close().await;
+}
+
+#[tokio::test]
+async fn persistence_rejects_inconsistent_completion_and_rejection_reason() {
+    let pool = pool().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let id = donation(&pool, owner, None).await;
+    assert!(
+        sqlx::query("UPDATE donations SET status = 'entregado' WHERE id = $1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query(
+            "UPDATE donations SET status = 'rechazado', completed_at = now() WHERE id = $1"
+        )
+        .bind(id)
+        .execute(&pool)
+        .await
+        .is_err()
+    );
+    assert!(
+        sqlx::query("UPDATE donations SET rejection_reason = 'orphan reason' WHERE id = $1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        donation_state(&pool, id).await,
+        ("en_acopio".into(), None, None, false)
+    );
+}
+
+#[tokio::test]
+async fn full_http_lifecycle_from_publication_to_delivery() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let (status, created) = send(
+        &app,
+        "POST",
+        "/api/donations",
+        Some(&token(owner, Role::Empresa)),
+        Some(json!({"title":"Food", "quantity":2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/donations/{id}/request"),
+            Some(&token(ngo_user, Role::Ong)),
+            None
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/donations/{id}/approve"),
+            Some(&token(owner, Role::Empresa)),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        scan(&app, id, owner, Role::Empresa, "salida", None).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        scan(&app, id, ngo_user, Role::Ong, "entrega", None).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        donation_state(&pool, id).await,
+        ("entregado".into(), Some(ngo_id), None, true)
+    );
+    let logs: Vec<(String, Option<String>, String)> = sqlx::query_as("SELECT action, previous_status, new_status FROM delivery_logs WHERE donation_id = $1 ORDER BY created_at, id")
+        .bind(id).fetch_all(&pool).await.unwrap();
+    assert_eq!(
+        logs,
+        vec![
+            (
+                "salida".into(),
+                Some("reservado".into()),
+                "en_transito".into()
+            ),
+            (
+                "entrega".into(),
+                Some("en_transito".into()),
+                "entregado".into()
+            )
+        ]
     );
 }
