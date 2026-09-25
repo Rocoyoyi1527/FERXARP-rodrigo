@@ -1,11 +1,11 @@
 use axum::{
     extract::FromRequestParts,
-    http::{header::AUTHORIZATION, request::Parts, StatusCode},
+    http::{StatusCode, header::AUTHORIZATION, request::Parts},
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{DecodingKey, Validation, decode};
 use std::sync::Arc;
 
-use crate::{api::auth::Claims, AppState};
+use crate::{AppState, api::auth::Claims};
 
 // Al usar Axum 0.7+ y Rust moderno, ya no necesitamos la macro #[async_trait]
 impl FromRequestParts<Arc<AppState>> for Claims {
@@ -35,7 +35,12 @@ impl FromRequestParts<Arc<AppState>> for Claims {
             &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
             &Validation::default(),
         )
-        .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Token inválido o expirado: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::UNAUTHORIZED,
+                format!("Token inválido o expirado: {}", e),
+            )
+        })?;
 
         // 4. Inyectar los Claims (con el rol y UUID) directamente al controlador
         Ok(token_data.claims)

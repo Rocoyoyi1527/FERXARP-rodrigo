@@ -1,0 +1,148 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT \n                    r.id as request_id,\n                    d.id as donation_id,\n                    d.title,\n                    d.description,\n                    d.quantity,\n                    d.status as donation_status,\n                    r.status as request_status,\n                    u.email as donor_email,\n                    n.name as ngo_name,\n                    d.rejection_reason,\n                    r.created_at\n                FROM donation_requests r\n                JOIN donations d ON r.donation_id = d.id\n                JOIN users u ON d.user_id = u.id\n                JOIN ngos n ON r.ngo_id = n.id\n                WHERE d.user_id = $1\n                ORDER BY r.created_at DESC\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "donation_requests",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "donation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "quantity",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "quantity"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "donation_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "request_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "donation_requests",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "donor_email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "ngo_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ngos",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "rejection_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "rejection_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "donation_requests",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "05d1448246ecfe605ba629d5c7ebd13837d91756a9e4a579618f575ef91d8982"
+}

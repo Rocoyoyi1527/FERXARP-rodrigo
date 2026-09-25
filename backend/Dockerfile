@@ -11,8 +11,10 @@ RUN apt-get update && apt-get install -y \
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-COPY .env ./.env
+COPY .sqlx ./.sqlx
+COPY migrations ./migrations
 
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # Etapa 2: Imagen final con la misma versión de GLIBC

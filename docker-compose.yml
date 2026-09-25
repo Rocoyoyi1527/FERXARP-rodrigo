@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ferxarp}
+      POSTGRES_USER: ${POSTGRES_USER:-ferxarp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferxarp_local_only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - fexarp-network
+
   # 1. Base de datos vectorial
   chromadb:
     image: chromadb/chroma:latest
@@ -27,8 +45,12 @@ services:
     environment:
       - PORT=8000
       - CHROMA_URL=http://chromadb:8000
+      - DATABASE_URL=postgres://${POSTGRES_USER:-ferxarp}:${POSTGRES_PASSWORD:-ferxarp_local_only}@postgres:5432/${POSTGRES_DB:-ferxarp}
     depends_on:
-      - chromadb
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
     restart: unless-stopped
     networks:
       - fexarp-network
@@ -50,6 +72,8 @@ services:
       - fexarp-network
 
 volumes:
+  postgres_data:
+    driver: local
   chroma_data:
     driver: local
 

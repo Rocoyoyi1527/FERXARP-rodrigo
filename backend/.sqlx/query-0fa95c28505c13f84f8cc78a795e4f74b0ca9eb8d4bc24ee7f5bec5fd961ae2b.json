@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO donations (id, user_id, title, description, quantity, status)\n                    VALUES ($1, $2, $3, $4, $5, 'en_acopio')\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0fa95c28505c13f84f8cc78a795e4f74b0ca9eb8d4bc24ee7f5bec5fd961ae2b"
+}

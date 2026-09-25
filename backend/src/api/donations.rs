@@ -1,8 +1,8 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -10,14 +10,14 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
+    AppState,
     ai::{
         chroma_db::ChromaClient,
         groq::GroqClient,
-        matcher::{rank_ngos_for_donation, NgoCandidate},
+        matcher::{NgoCandidate, rank_ngos_for_donation},
     },
     api::auth::Claims,
     models::user::Role,
-    AppState,
 };
 
 // --- ESTRUCTURAS DE DATOS ---
@@ -99,7 +99,8 @@ async fn create_donation(
     if !matches!(claims.role, Role::Empresa | Role::Admin) {
         return Err((
             StatusCode::FORBIDDEN,
-            "Acceso denegado: únicamente empresas o administradores pueden publicar donaciones.".to_string(),
+            "Acceso denegado: únicamente empresas o administradores pueden publicar donaciones."
+                .to_string(),
         ));
     }
 
@@ -116,13 +117,18 @@ async fn create_donation(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error en BD: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error en BD: {}", e),
+        )
+    })?;
 
     Ok((
         StatusCode::CREATED,
         Json(DonationResponse {
             id: record.id,
-            user_id: record.user_id,
+            user_id: Some(record.user_id),
             title: record.title,
             description: record.description,
             quantity: record.quantity,
@@ -147,13 +153,18 @@ async fn list_donations(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error en BD: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error en BD: {}", e),
+        )
+    })?;
 
     let donations = records
         .into_iter()
         .map(|rec| DonationResponse {
             id: rec.id,
-            user_id: rec.user_id,
+            user_id: Some(rec.user_id),
             title: rec.title,
             description: rec.description,
             quantity: rec.quantity,
@@ -188,7 +199,12 @@ async fn list_available_feed(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error BD: {}", e),
+        )
+    })?;
 
     let feed = records
         .into_iter()
@@ -199,7 +215,7 @@ async fn list_available_feed(
             quantity: r.quantity,
             status: r.status,
             donor_email: r.donor_email,
-            created_at: r.created_at,
+            created_at: Some(r.created_at),
         })
         .collect();
 
@@ -221,23 +237,34 @@ async fn get_donation_matches(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .ok_or((StatusCode::NOT_FOUND, "Donación no encontrada".to_string()))?;
 
-    let search_text = format!("{} {}", donation.title, donation.description.clone().unwrap_or_default()).to_lowercase();
+    let search_text = format!(
+        "{} {}",
+        donation.title,
+        donation.description.clone().unwrap_or_default()
+    )
+    .to_lowercase();
 
     // 1. Similitud vectorial en ChromaDB (Vec<(Uuid, f64)>)
     let chroma = ChromaClient::new(None);
-    let mut similarities = chroma.query_similar_ngos(&search_text, 10).await.unwrap_or_default();
+    let mut similarities = chroma
+        .query_similar_ngos(&search_text, 10)
+        .await
+        .unwrap_or_default();
 
     // 2. Candidatos en Supabase
-    let ngos_records = sqlx::query!(
-        r#"SELECT id, name, needs_description, latitude, longitude FROM ngos"#
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let ngos_records =
+        sqlx::query!(r#"SELECT id, name, needs_description, latitude, longitude FROM ngos"#)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Boost léxico directo sobre Vec<(Uuid, f64)>
     for ngo in &ngos_records {
-        let needs_lower = ngo.needs_description.clone().unwrap_or_default().to_lowercase();
+        let needs_lower = ngo
+            .needs_description
+            .clone()
+            .unwrap_or_default()
+            .to_lowercase();
         let has_direct_match = (search_text.contains("leche") && needs_lower.contains("leche"))
             || (search_text.contains("alimento") && needs_lower.contains("alimento"))
             || (search_text.contains("abarrote") && needs_lower.contains("alimento"))
@@ -324,7 +351,8 @@ async fn request_donation(
     if !matches!(claims.role, Role::Ong | Role::Admin) {
         return Err((
             StatusCode::FORBIDDEN,
-            "Únicamente organizaciones sociales o administradores pueden solicitar donaciones.".to_string(),
+            "Únicamente organizaciones sociales o administradores pueden solicitar donaciones."
+                .to_string(),
         ));
     }
 
@@ -332,14 +360,23 @@ async fn request_donation(
     let ngo_id = match sqlx::query!(r#"SELECT id FROM ngos WHERE user_id = $1"#, claims.sub)
         .fetch_optional(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?
-    {
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error BD: {}", e),
+            )
+        })? {
         Some(record) => record.id,
         None => {
             let user_email = sqlx::query!(r#"SELECT email FROM users WHERE id = $1"#, claims.sub)
                 .fetch_optional(&state.db)
                 .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Error BD: {}", e),
+                    )
+                })?
                 .map(|u| u.email)
                 .unwrap_or_else(|| "Organización Social".to_string());
 
@@ -376,7 +413,12 @@ async fn request_donation(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al crear solicitud: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al crear solicitud: {}", e),
+        )
+    })?;
 
     sqlx::query!(
         r#"
@@ -389,7 +431,12 @@ async fn request_donation(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al apartar donación: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al apartar donación: {}", e),
+        )
+    })?;
 
     Ok(StatusCode::CREATED)
 }
@@ -426,7 +473,12 @@ async fn list_shipments(
             )
             .fetch_all(&state.db)
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error BD: {}", e),
+                )
+            })?;
 
             records
                 .into_iter()
@@ -441,7 +493,7 @@ async fn list_shipments(
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
                     rejection_reason: r.rejection_reason,
-                    created_at: r.created_at,
+                    created_at: Some(r.created_at),
                 })
                 .collect()
         }
@@ -471,7 +523,12 @@ async fn list_shipments(
             )
             .fetch_all(&state.db)
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error BD: {}", e),
+                )
+            })?;
 
             records
                 .into_iter()
@@ -486,7 +543,7 @@ async fn list_shipments(
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
                     rejection_reason: r.rejection_reason,
-                    created_at: r.created_at,
+                    created_at: Some(r.created_at),
                 })
                 .collect()
         }
@@ -514,7 +571,12 @@ async fn list_shipments(
             )
             .fetch_all(&state.db)
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error BD: {}", e),
+                )
+            })?;
 
             records
                 .into_iter()
@@ -529,7 +591,7 @@ async fn list_shipments(
                     donor_email: r.donor_email,
                     ngo_name: r.ngo_name,
                     rejection_reason: r.rejection_reason,
-                    created_at: r.created_at,
+                    created_at: Some(r.created_at),
                 })
                 .collect()
         }
@@ -547,7 +609,8 @@ async fn approve_shipment(
     if !matches!(claims.role, Role::Empresa | Role::Admin) {
         return Err((
             StatusCode::FORBIDDEN,
-            "Únicamente la empresa donante o un administrador pueden autorizar el despacho.".to_string(),
+            "Únicamente la empresa donante o un administrador pueden autorizar el despacho."
+                .to_string(),
         ));
     }
 
@@ -561,7 +624,12 @@ async fn approve_shipment(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al aprobar solicitud: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al aprobar solicitud: {}", e),
+        )
+    })?;
 
     sqlx::query!(
         r#"
@@ -573,7 +641,12 @@ async fn approve_shipment(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar envío: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al actualizar envío: {}", e),
+        )
+    })?;
 
     sqlx::query!(
         r#"

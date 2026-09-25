@@ -1,16 +1,16 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
-use bcrypt::{hash, verify, DEFAULT_COST};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use bcrypt::{DEFAULT_COST, hash, verify};
+use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{models::user::Role, AppState};
+use crate::{AppState, models::user::Role};
 
 // --- ESTRUCTURAS DE DATOS ---
 
@@ -61,7 +61,7 @@ async fn register(
     let hashed_password = hash(&payload.password, DEFAULT_COST)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-// 2. Insertar en Supabase manejando el conflicto de email duplicado
+    // 2. Insertar en Supabase manejando el conflicto de email duplicado
     let user_record = sqlx::query!(
         r#"
         INSERT INTO users (email, password_hash, role) 
@@ -75,15 +75,19 @@ async fn register(
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
-        if let Some(db_err) = e.as_database_error() {
-            if db_err.is_unique_violation() {
-                return (
-                    StatusCode::CONFLICT,
-                    "Este correo electrónico ya se encuentra registrado. Por favor inicia sesión.".to_string(),
-                );
-            }
+        if let Some(db_err) = e.as_database_error()
+            && db_err.is_unique_violation()
+        {
+            return (
+                StatusCode::CONFLICT,
+                "Este correo electrónico ya se encuentra registrado. Por favor inicia sesión."
+                    .to_string(),
+            );
         }
-        (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al crear usuario: {}", e))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al crear usuario: {}", e),
+        )
     })?;
 
     // 3. Si el rol registrado es ONG, inicializar automáticamente su registro relacional[cite: 14, 16]
@@ -145,13 +149,19 @@ async fn login(
     .fetch_optional(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or((StatusCode::UNAUTHORIZED, "Credenciales incorrectas".to_string()))?;
+    .ok_or((
+        StatusCode::UNAUTHORIZED,
+        "Credenciales incorrectas".to_string(),
+    ))?;
 
     let is_valid = verify(&payload.password, &user_record.password_hash)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if !is_valid {
-        return Err((StatusCode::UNAUTHORIZED, "Credenciales incorrectas".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Credenciales incorrectas".to_string(),
+        ));
     }
 
     let expiration = chrono::Utc::now()
@@ -202,7 +212,12 @@ async fn list_all_ngos(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error BD: {}", e),
+        )
+    })?;
 
     let list = records
         .into_iter()
@@ -211,7 +226,7 @@ async fn list_all_ngos(
                 "id": r.id,
                 "name": r.name,
                 "needs_description": r.needs_description,
-                "is_verified": r.is_verified.unwrap_or(false),
+                "is_verified": r.is_verified,
                 "email": r.email,
                 "created_at": r.created_at
             })
@@ -245,10 +260,15 @@ async fn toggle_ngo_verification(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al verificar ONG: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al verificar ONG: {}", e),
+        )
+    })?;
 
     Ok(Json(serde_json::json!({
         "id": updated.id,
-        "is_verified": updated.is_verified.unwrap_or(false)
+        "is_verified": updated.is_verified
     })))
 }

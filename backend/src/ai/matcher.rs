@@ -1,8 +1,8 @@
 // backend/src/ai/matcher.rs
 
+use super::scoring::{calculate_haversine_distance, calculate_match_score};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use super::scoring::{calculate_haversine_distance, calculate_match_score};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NgoCandidate {
@@ -38,7 +38,7 @@ pub fn rank_ngos_for_donation(
             let lon = ngo.longitude?;
 
             let distance = calculate_haversine_distance(donation_lat, donation_lon, lat, lon);
-            
+
             // Buscar la similitud calculada o asumir 0.0 si no hubo coincidencia
             let similarity = semantic_similarities
                 .iter()
@@ -46,7 +46,8 @@ pub fn rank_ngos_for_donation(
                 .map(|(_, s)| *s)
                 .unwrap_or(0.0);
 
-            let score = calculate_match_score(similarity, distance, max_radius_km, ngo.urgency_level);
+            let score =
+                calculate_match_score(similarity, distance, max_radius_km, ngo.urgency_level);
 
             Some(ScoredMatch {
                 ngo_id: ngo.id,
@@ -59,6 +60,10 @@ pub fn rank_ngos_for_donation(
         .collect();
 
     // Ordenar de mayor a menor puntuación
-    results.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.final_score
+            .partial_cmp(&a.final_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     results
 }

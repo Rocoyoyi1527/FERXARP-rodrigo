@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            COUNT(*) as total,\n            COUNT(*) FILTER (WHERE status = 'entregado') as delivered,\n            COUNT(*) FILTER (WHERE status = 'en_transito') as in_transit,\n            COUNT(*) FILTER (WHERE status = 'rechazado') as rejected,\n            COALESCE(SUM(quantity) FILTER (WHERE status = 'entregado'), 0) as delivered_qty\n        FROM donations\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "delivered",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "in_transit",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "rejected",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "delivered_qty",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ae7ce5dce4c75d11bee78a626f8e8413f77d526f5d64fbdea1e4ce0129819877"
+}

@@ -1,18 +1,14 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{
-    api::auth::Claims,
-    models::user::Role,
-    AppState,
-};
+use crate::{AppState, api::auth::Claims, models::user::Role};
 
 #[derive(Deserialize)]
 pub struct ScanRequest {
@@ -25,10 +21,10 @@ pub struct ScanRequest {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScanAction {
-    Entrada,  // Ingreso al centro de acopio
-    Salida,   // En tránsito hacia la ONG
-    Entrega,  // Recepción final exitosa
-    Rechazo,  // Merma o rechazo por condiciones físicas
+    Entrada, // Ingreso al centro de acopio
+    Salida,  // En tránsito hacia la ONG
+    Entrega, // Recepción final exitosa
+    Rechazo, // Merma o rechazo por condiciones físicas
 }
 
 impl ScanAction {
@@ -75,7 +71,8 @@ async fn process_scan(
     if !matches!(claims.role, Role::Ong | Role::Admin) {
         return Err((
             StatusCode::FORBIDDEN,
-            "Acceso denegado: permisos insuficientes para registrar transiciones físicas.".to_string(),
+            "Acceso denegado: permisos insuficientes para registrar transiciones físicas."
+                .to_string(),
         ));
     }
 
@@ -88,8 +85,16 @@ async fn process_scan(
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?
-    .ok_or((StatusCode::NOT_FOUND, "Lote de donación no encontrado".to_string()))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error BD: {}", e),
+        )
+    })?
+    .ok_or((
+        StatusCode::NOT_FOUND,
+        "Lote de donación no encontrado".to_string(),
+    ))?;
 
     // 2. Actualizar donación y registrar fecha de entrega o motivo de rechazo
     sqlx::query!(
@@ -106,7 +111,12 @@ async fn process_scan(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al actualizar: {}", e),
+        )
+    })?;
 
     // 3. Registrar auditoría inmutable en delivery_logs (Riesgo R5)
     sqlx::query!(
@@ -122,7 +132,12 @@ async fn process_scan(
     )
     .execute(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al auditar log: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al auditar log: {}", e),
+        )
+    })?;
 
     Ok(Json(ScanResponse {
         donation_id: payload.donation_id,
@@ -144,7 +159,12 @@ async fn get_tracking_status(
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error BD: {}", e),
+        )
+    })?
     .ok_or((StatusCode::NOT_FOUND, "Lote no encontrado".to_string()))?;
 
     Ok(Json(serde_json::json!({

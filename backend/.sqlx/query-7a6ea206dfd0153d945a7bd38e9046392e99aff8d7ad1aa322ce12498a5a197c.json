@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE donations \n        SET status = 'en_transito' \n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7a6ea206dfd0153d945a7bd38e9046392e99aff8d7ad1aa322ce12498a5a197c"
+}

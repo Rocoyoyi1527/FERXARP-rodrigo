@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE donations \n        SET status = $1,\n            rejection_reason = CASE WHEN $1 = 'rechazado' THEN $3 ELSE rejection_reason END,\n            completed_at = CASE WHEN $1 = 'entregado' THEN now() ELSE completed_at END\n        WHERE id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "25041058b774e4b0f41b74bf286ce0abef78eee709fcb7c9c7dcba9e6afb1a74"
+}

@@ -1,6 +1,6 @@
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use dotenv::dotenv;
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;

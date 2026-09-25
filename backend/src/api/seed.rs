@@ -1,12 +1,17 @@
-use axum::{extract::State, http::StatusCode, routing::{get, post}, Json, Router};
-use bcrypt::{hash, DEFAULT_COST};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::StatusCode,
+    routing::{get, post},
+};
+use bcrypt::{DEFAULT_COST, hash};
 use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    ai::{chroma_db::ChromaClient, groq::GroqClient},
     AppState,
+    ai::{chroma_db::ChromaClient, groq::GroqClient},
 };
 
 #[derive(Serialize)]
@@ -33,6 +38,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/test-groq", get(test_groq_connection))
 }
 
+#[allow(dead_code)]
 struct CompanySeed {
     email: &'static str,
     name: &'static str,
@@ -63,9 +69,21 @@ async fn seed_veracruz_data(
             lat: 19.1417,
             lon: -96.1042,
             donations: vec![
-                ("80 Cajas de Leche Entera", "Lácteos pasteurizados sellados con 20 días de vigencia para consumo", 80),
-                ("120 Paquetes de Abarrotes y Harinas", "Bolsas de harina de trigo, arroz y frijol negro empaquetados", 120),
-                ("50 Cajas de Manzanas y Verduras", "Fruta de temporada fresca en cajas de madera aptas para consumo inmediato", 50),
+                (
+                    "80 Cajas de Leche Entera",
+                    "Lácteos pasteurizados sellados con 20 días de vigencia para consumo",
+                    80,
+                ),
+                (
+                    "120 Paquetes de Abarrotes y Harinas",
+                    "Bolsas de harina de trigo, arroz y frijol negro empaquetados",
+                    120,
+                ),
+                (
+                    "50 Cajas de Manzanas y Verduras",
+                    "Fruta de temporada fresca en cajas de madera aptas para consumo inmediato",
+                    50,
+                ),
             ],
         },
         CompanySeed {
@@ -74,8 +92,16 @@ async fn seed_veracruz_data(
             lat: 19.1764,
             lon: -96.2238,
             donations: vec![
-                ("15 Laptops y Servidores Dell", "Equipo de cómputo funcional retirado por ciclo de renovación interna", 15),
-                ("40 Escritorios y Sillas de Oficina", "Mobiliario ergonómico en óptimo estado para aulas o administración", 40),
+                (
+                    "15 Laptops y Servidores Dell",
+                    "Equipo de cómputo funcional retirado por ciclo de renovación interna",
+                    15,
+                ),
+                (
+                    "40 Escritorios y Sillas de Oficina",
+                    "Mobiliario ergonómico en óptimo estado para aulas o administración",
+                    40,
+                ),
             ],
         },
         CompanySeed {
@@ -83,9 +109,11 @@ async fn seed_veracruz_data(
             name: "Cafiver Veracruz",
             lat: 19.1650,
             lon: -96.1400,
-            donations: vec![
-                ("200 Frascos de Café Soluble", "Café procesado en frascos herméticos de 200g listos para despensas", 200),
-            ],
+            donations: vec![(
+                "200 Frascos de Café Soluble",
+                "Café procesado en frascos herméticos de 200g listos para despensas",
+                200,
+            )],
         },
     ];
 
@@ -144,7 +172,12 @@ async fn seed_veracruz_data(
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error empresa: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error empresa: {}", e),
+            )
+        })?;
 
         for (title, desc, qty) in &comp.donations {
             let existing_don = sqlx::query!(
@@ -198,7 +231,12 @@ async fn seed_veracruz_data(
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error usuario ONG: {}", e)))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error usuario ONG: {}", e),
+            )
+        })?;
 
         let ngo_row = sqlx::query!(
             "SELECT id FROM ngos WHERE name = $1 OR user_id = $2",
@@ -244,7 +282,13 @@ async fn seed_veracruz_data(
         };
 
         let _ = chroma.add_or_update_ngo(final_ngo_id, ngo.needs).await;
-        ngos_list.push((final_ngo_id, ngo.name.to_string(), ngo.needs.to_string(), ngo.lat, ngo.lon));
+        ngos_list.push((
+            final_ngo_id,
+            ngo.name.to_string(),
+            ngo.needs.to_string(),
+            ngo.lat,
+            ngo.lon,
+        ));
     }
 
     // 3. Puntuación automática con DeepSeek-R1 (Groq)
@@ -258,17 +302,17 @@ async fn seed_veracruz_data(
         for (_ngo_id, name, needs, lat, lon) in &ngos_list {
             let dist = ((19.1738 - lat).powi(2) + (-96.1342 - lon).powi(2)).sqrt() * 111.0;
 
-            if let Some(eval) = groq.evaluate_fit(title, desc, name, needs, dist).await {
-                if eval.compatibility_score > best_score {
-                    best_score = eval.compatibility_score;
-                    best_eval = Some(AiMatchEvaluation {
-                        donation_title: title.clone(),
-                        recommended_ngo: name.clone(),
-                        score: eval.compatibility_score,
-                        priority: eval.priority_level,
-                        reasoning: eval.reasoning,
-                    });
-                }
+            if let Some(eval) = groq.evaluate_fit(title, desc, name, needs, dist).await
+                && eval.compatibility_score > best_score
+            {
+                best_score = eval.compatibility_score;
+                best_eval = Some(AiMatchEvaluation {
+                    donation_title: title.clone(),
+                    recommended_ngo: name.clone(),
+                    score: eval.compatibility_score,
+                    priority: eval.priority_level,
+                    reasoning: eval.reasoning,
+                });
             }
         }
 
@@ -291,13 +335,15 @@ async fn test_groq_connection() -> Result<Json<serde_json::Value>, (StatusCode, 
     let groq = GroqClient::new();
     let start = std::time::Instant::now();
 
-    let eval = groq.evaluate_fit(
-        "80 Cajas de Leche Entera",
-        "Lácteos pasteurizados con 20 días de vigencia",
-        "Banco de Alimentos de Veracruz (AMBA)",
-        "Demanda crítica de leche, lácteos y fórmulas infantiles para comedores comunitarios",
-        2.4,
-    ).await;
+    let eval = groq
+        .evaluate_fit(
+            "80 Cajas de Leche Entera",
+            "Lácteos pasteurizados con 20 días de vigencia",
+            "Banco de Alimentos de Veracruz (AMBA)",
+            "Demanda crítica de leche, lácteos y fórmulas infantiles para comedores comunitarios",
+            2.4,
+        )
+        .await;
 
     let elapsed_ms = start.elapsed().as_millis();
 
@@ -310,7 +356,8 @@ async fn test_groq_connection() -> Result<Json<serde_json::Value>, (StatusCode, 
         }))),
         None => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Fallo al conectar con Groq. Verifica que GROQ_API_KEY esté presente en backend/.env".to_string(),
+            "Fallo al conectar con Groq. Verifica que GROQ_API_KEY esté presente en backend/.env"
+                .to_string(),
         )),
     }
 }
