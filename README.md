@@ -47,6 +47,21 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
 
 El seed de demostración requiere un JWT de Admin y `FERXARP_SEED_PASSWORD` en `backend/.env`. Configura una contraseña local propia antes de invocarlo; las ONG sembradas empiezan sin verificar.
 
+## Provisionar administrador inicial
+
+Con PostgreSQL local levantado y las migraciones aplicadas, entra en `backend/` y define `FERXARP_ADMIN_EMAIL` y `FERXARP_ADMIN_PASSWORD`. La contraseña debe tener al menos 12 caracteres. Para introducirla sin mostrarla ni incluirla en el historial de comandos:
+
+```bash
+export FERXARP_ADMIN_EMAIL='<correo del administrador>'
+read -r -s -p 'Contraseña inicial: ' FERXARP_ADMIN_PASSWORD
+printf '\n'
+export FERXARP_ADMIN_PASSWORD
+cargo run --locked --bin provision_admin
+unset FERXARP_ADMIN_EMAIL FERXARP_ADMIN_PASSWORD
+```
+
+Repetir el comando para el mismo Admin no cambia su contraseña. Si el correo pertenece a otro rol, el comando rechaza la elevación. `POST /api/auth/register` solo admite `empresa` y `ong`; no crea administradores.
+
 SQLx CLI y las macros `query!` leen `backend/.env` en el directorio de trabajo. La imagen Docker usa metadata versionada en `.sqlx` para compilar sin incluir secretos.
 
 Para usar Compose completo, `docker compose up --build` toma `backend/.env` en tiempo de ejecución y conecta el backend al servicio `postgres`. La imagen no contiene el archivo `.env`.

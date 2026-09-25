@@ -8,7 +8,7 @@ use axum::{
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde_json::{Value, json};
 use sqlx::{
-    PgPool, Row,
+    AssertSqlSafe, PgPool, Row,
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 use tokio::sync::OnceCell;
@@ -16,6 +16,9 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::{AppState, api::auth::Claims, models::user::Role};
+use backend::admin_bootstrap::{
+    ProvisionConfig, ProvisionError, ProvisionOutcome, provision_admin,
+};
 
 const SECRET: &str = "local-test-jwt-secret-only";
 static DB_READY: OnceCell<()> = OnceCell::const_new();
@@ -794,5 +797,311 @@ async fn admin_list_and_groq_diagnostic_require_admin() {
         .await
         .0,
         StatusCode::OK
+    );
+}
+
+fn bootstrap_config(email: &str, password: String) -> ProvisionConfig {
+    ProvisionConfig::from_values(Some(email.to_string()), Some(password)).unwrap()
+}
+
+#[tokio::test]
+async fn admin_boot_01_empty_database_creates_one_admin() {
+    let name = format!("ferxarp_admin_test_{}", Uuid::new_v4().simple());
+    let bootstrap = PgPoolOptions::new()
+        .connect_with(local_options())
+        .await
+        .unwrap();
+    sqlx::query(AssertSqlSafe(format!("CREATE DATABASE {name}")))
+        .execute(&bootstrap)
+        .await
+        .unwrap();
+    let pool = PgPoolOptions::new()
+        .connect_with(local_options().database(&name))
+        .await
+        .unwrap();
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+    let initial_count: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(initial_count, 0);
+
+    let email = format!("{}@test.local", Uuid::new_v4());
+    let password = Uuid::new_v4().to_string();
+    let config = bootstrap_config(&email, password.clone());
+    assert_eq!(
+        provision_admin(&pool, &config).await.unwrap(),
+        ProvisionOutcome::Created
+    );
+    let row = sqlx::query("SELECT role::text AS role, password_hash FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(row.get::<String, _>("role"), "admin");
+    assert!(bcrypt::verify(password, row.get::<String, _>("password_hash").as_str()).unwrap());
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(total, 1);
+
+    pool.close().await;
+    sqlx::query(AssertSqlSafe(format!("DROP DATABASE {name}")))
+        .execute(&bootstrap)
+        .await
+        .unwrap();
+    bootstrap.close().await;
+}
+
+#[tokio::test]
+async fn admin_boot_02_repeated_run_preserves_single_admin_and_hash() {
+    let pool = pool().await;
+    let email = format!("{}@test.local", Uuid::new_v4());
+    let first = bootstrap_config(&email, Uuid::new_v4().to_string());
+    let second = bootstrap_config(&email, Uuid::new_v4().to_string());
+    assert_eq!(
+        provision_admin(&pool, &first).await.unwrap(),
+        ProvisionOutcome::Created
+    );
+    let original_hash: String =
+        sqlx::query_scalar("SELECT password_hash FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        provision_admin(&pool, &second).await.unwrap(),
+        ProvisionOutcome::AlreadyExists
+    );
+    let row = sqlx::query(
+        "SELECT count(*) AS count, min(password_hash) AS password_hash FROM users WHERE email = $1",
+    )
+    .bind(&email)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.get::<i64, _>("count"), 1);
+    assert_eq!(
+        row.get::<Option<String>, _>("password_hash"),
+        Some(original_hash)
+    );
+}
+
+async fn existing_non_admin_is_not_promoted(role: Role) {
+    let pool = pool().await;
+    let id = user(&pool, role.clone()).await;
+    let email: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let config = bootstrap_config(&email, Uuid::new_v4().to_string());
+    assert_eq!(
+        provision_admin(&pool, &config).await,
+        Err(ProvisionError::ExistingNonAdmin)
+    );
+    let actual: String = sqlx::query_scalar("SELECT role::text FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        actual,
+        match role {
+            Role::Empresa => "empresa",
+            Role::Ong => "ong",
+            _ => unreachable!(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn admin_boot_03_empresa_is_not_promoted() {
+    existing_non_admin_is_not_promoted(Role::Empresa).await;
+}
+
+#[tokio::test]
+async fn admin_boot_04_ong_is_not_promoted() {
+    existing_non_admin_is_not_promoted(Role::Ong).await;
+}
+
+#[tokio::test]
+async fn admin_boot_05_output_and_errors_hide_password() {
+    let pool = pool().await;
+    let email = format!("{}@test.local", Uuid::new_v4());
+    let password = Uuid::new_v4().to_string();
+    let config = bootstrap_config(&email, password.clone());
+    let outcome = provision_admin(&pool, &config).await.unwrap();
+    assert!(!outcome.message().contains(&password));
+
+    let company = user(&pool, Role::Empresa).await;
+    let company_email: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(company)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let error = provision_admin(&pool, &bootstrap_config(&company_email, password.clone()))
+        .await
+        .unwrap_err();
+    assert!(!error.to_string().contains(&password));
+    assert!(!format!("{error:?}").contains(&password));
+}
+
+#[test]
+fn admin_boot_06_missing_or_invalid_configuration_is_controlled() {
+    assert!(matches!(
+        ProvisionConfig::from_values(None, None),
+        Err(ProvisionError::MissingEmail)
+    ));
+    assert!(matches!(
+        ProvisionConfig::from_values(Some("admin@test.local".into()), None),
+        Err(ProvisionError::MissingPassword)
+    ));
+    assert!(matches!(
+        ProvisionConfig::from_values(Some(" ".into()), Some(Uuid::new_v4().to_string())),
+        Err(ProvisionError::MissingEmail)
+    ));
+    assert!(matches!(
+        ProvisionConfig::from_values(Some("invalid".into()), Some(Uuid::new_v4().to_string())),
+        Err(ProvisionError::InvalidEmail)
+    ));
+    assert!(matches!(
+        ProvisionConfig::from_values(Some("admin@test.local".into()), Some(String::new())),
+        Err(ProvisionError::MissingPassword)
+    ));
+}
+
+#[tokio::test]
+async fn admin_boot_concurrent_runs_create_one_admin() {
+    let pool = pool().await;
+    let email = format!("{}@test.local", Uuid::new_v4());
+    let config = bootstrap_config(&email, Uuid::new_v4().to_string());
+    let (first, second) = tokio::join!(
+        provision_admin(&pool, &config),
+        provision_admin(&pool, &config)
+    );
+    let outcomes = [first.unwrap(), second.unwrap()];
+    assert!(outcomes.contains(&ProvisionOutcome::Created));
+    assert!(outcomes.contains(&ProvisionOutcome::AlreadyExists));
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn admin_boot_provisioned_admin_can_login_and_list_ngos() {
+    let (app, pool) = app().await;
+    let email = format!("{}@test.local", Uuid::new_v4());
+    let password = Uuid::new_v4().to_string();
+    provision_admin(&pool, &bootstrap_config(&email, password.clone()))
+        .await
+        .unwrap();
+    let (status, login) = send(
+        &app,
+        "POST",
+        "/api/auth/login",
+        None,
+        Some(json!({"email": email, "password": password})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let jwt = login["token"].as_str().unwrap();
+    assert_eq!(
+        send(&app, "GET", "/api/auth/ngos", Some(jwt), None).await.0,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn admin_boot_enables_initial_donation_chain_without_manual_database_edits() {
+    let (app, pool) = app().await;
+    let admin_email = format!("{}@test.local", Uuid::new_v4());
+    let admin_password = Uuid::new_v4().to_string();
+    provision_admin(
+        &pool,
+        &bootstrap_config(&admin_email, admin_password.clone()),
+    )
+    .await
+    .unwrap();
+    let (status, login) = send(
+        &app,
+        "POST",
+        "/api/auth/login",
+        None,
+        Some(json!({"email": admin_email, "password": admin_password})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let admin_jwt = login["token"].as_str().unwrap();
+
+    let company_email = format!("{}@test.local", Uuid::new_v4());
+    let (status, company) = send(
+        &app,
+        "POST",
+        "/api/auth/register",
+        None,
+        Some(json!({"email": company_email, "password": Uuid::new_v4().to_string(), "role": "empresa"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let company_jwt = company["token"].as_str().unwrap();
+
+    let ngo_email = format!("{}@test.local", Uuid::new_v4());
+    let (status, ngo_user) = send(
+        &app,
+        "POST",
+        "/api/auth/register",
+        None,
+        Some(json!({"email": ngo_email, "password": Uuid::new_v4().to_string(), "role": "ong"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let ngo_jwt = ngo_user["token"].as_str().unwrap();
+    let ngo_id: Uuid = sqlx::query_scalar(
+        "SELECT n.id FROM ngos n JOIN users u ON u.id = n.user_id WHERE u.email = $1",
+    )
+    .bind(ngo_email)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/auth/ngos/{ngo_id}/verify"),
+            Some(admin_jwt),
+            None,
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+
+    let (status, donation) = send(
+        &app,
+        "POST",
+        "/api/donations",
+        Some(company_jwt),
+        Some(json!({"title": "Test donation", "quantity": 1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let donation_id = donation["id"].as_str().unwrap();
+    assert_eq!(
+        send(
+            &app,
+            "POST",
+            &format!("/api/donations/{donation_id}/request"),
+            Some(ngo_jwt),
+            None,
+        )
+        .await
+        .0,
+        StatusCode::CREATED
     );
 }
