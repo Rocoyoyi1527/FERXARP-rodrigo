@@ -1,22 +1,23 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT email FROM users WHERE id = $1",
+  "query": "SELECT id FROM ngos WHERE id = $1 AND user_id = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "email",
-        "type_info": "Text",
+        "name": "id",
+        "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "users",
-            "name": "email"
+            "table": "ngos",
+            "name": "id"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -24,5 +25,5 @@
       false
     ]
   },
-  "hash": "f467aff95ef5ca0bae0f063d73838c35d672b83acb7897d87b61eef900ccccbd"
+  "hash": "4f393b4a87ce0a0c165048ff6bd355a02fdb511d717bdbffbf63e1f7c70c1983"
 }

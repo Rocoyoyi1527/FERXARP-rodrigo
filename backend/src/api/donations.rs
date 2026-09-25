@@ -16,7 +16,10 @@ use crate::{
         groq::GroqClient,
         matcher::{NgoCandidate, rank_ngos_for_donation},
     },
-    api::auth::Claims,
+    api::{
+        auth::Claims,
+        middleware::{internal_error, require_role},
+    },
     models::user::Role,
 };
 
@@ -348,59 +351,28 @@ async fn request_donation(
     Path(donation_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    if !matches!(claims.role, Role::Ong | Role::Admin) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Únicamente organizaciones sociales o administradores pueden solicitar donaciones."
-                .to_string(),
-        ));
+    require_role(&claims, Role::Ong)?;
+    let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
+    let ngo = sqlx::query!(
+        "SELECT id, is_verified FROM ngos WHERE user_id = $1 FOR UPDATE",
+        claims.sub
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| internal_error())?
+    .ok_or((StatusCode::FORBIDDEN, "Perfil ONG requerido".to_string()))?;
+    if !ngo.is_verified {
+        return Err((StatusCode::FORBIDDEN, "ONG no verificada".to_string()));
     }
-
-    // Auto-creación de registro en la tabla ngos si el usuario no lo tenía
-    let ngo_id = match sqlx::query!(r#"SELECT id FROM ngos WHERE user_id = $1"#, claims.sub)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error BD: {}", e),
-            )
-        })? {
-        Some(record) => record.id,
-        None => {
-            let user_email = sqlx::query!(r#"SELECT email FROM users WHERE id = $1"#, claims.sub)
-                .fetch_optional(&state.db)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Error BD: {}", e),
-                    )
-                })?
-                .map(|u| u.email)
-                .unwrap_or_else(|| "Organización Social".to_string());
-
-            let name = user_email.split('@').next().unwrap_or("Organización");
-            let new_id = Uuid::new_v4();
-
-            sqlx::query!(
-                r#"
-                INSERT INTO ngos (id, user_id, name, needs_description, latitude, longitude, is_verified)
-                VALUES ($1, $2, $3, $4, 19.1738, -96.1342, true)
-                ON CONFLICT (id) DO NOTHING
-                "#,
-                new_id,
-                claims.sub,
-                name,
-                "Recepción comunitaria y distribución de donativos"
-            )
-            .execute(&state.db)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al inicializar ONG: {}", e)))?;
-
-            new_id
-        }
-    };
+    let ngo_id = ngo.id;
+    sqlx::query!(
+        "SELECT id FROM donations WHERE id = $1 FOR UPDATE",
+        donation_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| internal_error())?
+    .ok_or((StatusCode::NOT_FOUND, "Donación no disponible".to_string()))?;
 
     sqlx::query!(
         r#"
@@ -411,14 +383,9 @@ async fn request_donation(
         donation_id,
         ngo_id
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al crear solicitud: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     sqlx::query!(
         r#"
@@ -429,14 +396,11 @@ async fn request_donation(
         ngo_id,
         donation_id
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al apartar donación: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
+
+    tx.commit().await.map_err(|_| internal_error())?;
 
     Ok(StatusCode::CREATED)
 }
@@ -606,30 +570,36 @@ async fn approve_shipment(
     Path(donation_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    if !matches!(claims.role, Role::Empresa | Role::Admin) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Únicamente la empresa donante o un administrador pueden autorizar el despacho."
-                .to_string(),
-        ));
-    }
+    require_role(&claims, Role::Empresa)?;
+    let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
+    let donation = sqlx::query!(
+        "SELECT assigned_ngo_id FROM donations WHERE id = $1 AND user_id = $2 FOR UPDATE",
+        donation_id,
+        claims.sub
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| internal_error())?
+    .ok_or((StatusCode::NOT_FOUND, "Donación no disponible".to_string()))?;
+    let assigned_ngo_id = donation
+        .assigned_ngo_id
+        .ok_or((StatusCode::NOT_FOUND, "Solicitud no disponible".to_string()))?;
 
-    sqlx::query!(
+    let updated = sqlx::query!(
         r#"
         UPDATE donation_requests 
         SET status = 'aprobada' 
-        WHERE donation_id = $1
+        WHERE donation_id = $1 AND ngo_id = $2
         "#,
-        donation_id
+        donation_id,
+        assigned_ngo_id
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al aprobar solicitud: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
+    if updated.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "Solicitud no disponible".to_string()));
+    }
 
     sqlx::query!(
         r#"
@@ -639,14 +609,9 @@ async fn approve_shipment(
         "#,
         donation_id
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al actualizar envío: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     sqlx::query!(
         r#"
@@ -655,9 +620,11 @@ async fn approve_shipment(
         "#,
         donation_id
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error en bitácora: {}", e)))?;
+    .map_err(|_| internal_error())?;
+
+    tx.commit().await.map_err(|_| internal_error())?;
 
     Ok(StatusCode::OK)
 }

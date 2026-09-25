@@ -14,6 +14,7 @@ pub mod models;
 pub struct AppState {
     pub db: Pool<Postgres>,
     pub jwt_secret: String,
+    pub seed_password: Option<String>,
 }
 
 #[tokio::main]
@@ -27,6 +28,9 @@ async fn main() {
     // 2. Extraer credenciales desde .env
     let database_url = env::var("DATABASE_URL").expect("Falta DATABASE_URL en el archivo .env");
     let jwt_secret = env::var("JWT_SECRET").expect("Falta JWT_SECRET en el archivo .env");
+    let seed_password = env::var("FERXARP_SEED_PASSWORD")
+        .ok()
+        .filter(|value| !value.is_empty());
 
     // 3. Establecer conexión con Supabase (PostgreSQL)
     let pool = PgPoolOptions::new()
@@ -41,18 +45,10 @@ async fn main() {
     let shared_state = Arc::new(AppState {
         db: pool,
         jwt_secret,
+        seed_password,
     });
 
-    // 5. Configurar el enrutador central y anidar los micro-dominios
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .nest("/api/auth", api::auth::router())
-        .nest("/api/donations", api::donations::router())
-        .nest("/api/scanner", api::scanner::router())
-        .nest("/api/metrics", api::metrics::router())
-        .nest("/api/seed", api::seed::router())
-        .layer(CorsLayer::permissive())
-        .with_state(shared_state);
+    let app = build_router(shared_state);
 
     // 6. Levantar el servidor en el puerto 8000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
@@ -60,7 +56,22 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+fn build_router(shared_state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/health", get(health_check))
+        .nest("/api/auth", api::auth::router())
+        .nest("/api/donations", api::donations::router())
+        .nest("/api/scanner", api::scanner::router())
+        .nest("/api/metrics", api::metrics::router())
+        .nest("/api/seed", api::seed::router())
+        .layer(CorsLayer::permissive())
+        .with_state(shared_state)
+}
+
 // Endpoint de verificación rápida del servidor
 async fn health_check() -> &'static str {
     "¡Fexarp API Online! El cerebro en Rust está conectado a Supabase."
 }
+
+#[cfg(test)]
+mod security_tests;

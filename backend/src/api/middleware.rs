@@ -5,7 +5,25 @@ use axum::{
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use std::sync::Arc;
 
+use crate::models::user::Role;
 use crate::{AppState, api::auth::Claims};
+
+pub type ApiError = (StatusCode, String);
+
+pub fn internal_error() -> ApiError {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Error interno".to_string(),
+    )
+}
+
+pub fn require_role(claims: &Claims, role: Role) -> Result<(), ApiError> {
+    if claims.role == role {
+        Ok(())
+    } else {
+        Err((StatusCode::FORBIDDEN, "Acceso denegado".to_string()))
+    }
+}
 
 // Al usar Axum 0.7+ y Rust moderno, ya no necesitamos la macro #[async_trait]
 impl FromRequestParts<Arc<AppState>> for Claims {
@@ -35,10 +53,10 @@ impl FromRequestParts<Arc<AppState>> for Claims {
             &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
             &Validation::default(),
         )
-        .map_err(|e| {
+        .map_err(|_| {
             (
                 StatusCode::UNAUTHORIZED,
-                format!("Token inválido o expirado: {}", e),
+                "Token inválido o expirado".to_string(),
             )
         })?;
 

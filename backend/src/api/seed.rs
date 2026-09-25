@@ -12,6 +12,11 @@ use uuid::Uuid;
 use crate::{
     AppState,
     ai::{chroma_db::ChromaClient, groq::GroqClient},
+    api::{
+        auth::Claims,
+        middleware::{internal_error, require_role},
+    },
+    models::user::Role,
 };
 
 #[derive(Serialize)]
@@ -57,10 +62,12 @@ struct NgoSeed {
 
 // POST /api/seed/veracruz - Ingesta idempotente con evaluación DeepSeek-R1
 async fn seed_veracruz_data(
+    claims: Claims,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SeedResponse>, (StatusCode, String)> {
-    let default_password = hash("Fexarp2026!", DEFAULT_COST)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    require_role(&claims, Role::Admin)?;
+    let seed_password = state.seed_password.as_deref().ok_or_else(internal_error)?;
+    let default_password = hash(seed_password, DEFAULT_COST).map_err(|_| internal_error())?;
 
     let companies = vec![
         CompanySeed {
@@ -172,12 +179,7 @@ async fn seed_veracruz_data(
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error empresa: {}", e),
-            )
-        })?;
+        .map_err(|_| internal_error())?;
 
         for (title, desc, qty) in &comp.donations {
             let existing_don = sqlx::query!(
@@ -231,12 +233,7 @@ async fn seed_veracruz_data(
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error usuario ONG: {}", e),
-            )
-        })?;
+        .map_err(|_| internal_error())?;
 
         let ngo_row = sqlx::query!(
             "SELECT id FROM ngos WHERE name = $1 OR user_id = $2",
@@ -251,7 +248,7 @@ async fn seed_veracruz_data(
             let _ = sqlx::query!(
                 r#"
                 UPDATE ngos 
-                SET needs_description = $1, latitude = $2, longitude = $3, is_verified = true
+                SET needs_description = $1, latitude = $2, longitude = $3
                 WHERE id = $4
                 "#,
                 ngo.needs,
@@ -267,7 +264,7 @@ async fn seed_veracruz_data(
             let _ = sqlx::query!(
                 r#"
                 INSERT INTO ngos (id, user_id, name, needs_description, latitude, longitude, is_verified)
-                VALUES ($1, $2, $3, $4, $5, $6, true)
+                VALUES ($1, $2, $3, $4, $5, $6, false)
                 "#,
                 new_id,
                 user_row.id,
@@ -331,7 +328,10 @@ async fn seed_veracruz_data(
 }
 
 // GET /api/seed/test-groq - Diagnóstico directo de DeepSeek-R1
-async fn test_groq_connection() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+async fn test_groq_connection(
+    claims: Claims,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    require_role(&claims, Role::Admin)?;
     let groq = GroqClient::new();
     let start = std::time::Instant::now();
 
@@ -354,10 +354,6 @@ async fn test_groq_connection() -> Result<Json<serde_json::Value>, (StatusCode, 
             "latency_ms": elapsed_ms,
             "evaluation": result
         }))),
-        None => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Fallo al conectar con Groq. Verifica que GROQ_API_KEY esté presente en backend/.env"
-                .to_string(),
-        )),
+        None => Err(internal_error()),
     }
 }

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE ngos \n                SET needs_description = $1, latitude = $2, longitude = $3\n                WHERE id = $4\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8",
+        "Float8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6ef7f5b8bb397644243b58e5abdf888d1f8b8ba17b79f35c2d8f2a29a74cd507"
+}

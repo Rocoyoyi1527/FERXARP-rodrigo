@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, State, rejection::JsonRejection},
     http::StatusCode,
     routing::{get, post},
 };
@@ -10,7 +10,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{AppState, models::user::Role};
+use crate::{
+    AppState,
+    api::middleware::{internal_error, require_role},
+    models::user::Role,
+};
 
 // --- ESTRUCTURAS DE DATOS ---
 
@@ -18,7 +22,23 @@ use crate::{AppState, models::user::Role};
 pub struct RegisterRequest {
     pub email: String,
     pub password: String,
-    pub role: Role,
+    pub role: PublicRole,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PublicRole {
+    Empresa,
+    Ong,
+}
+
+impl From<PublicRole> for Role {
+    fn from(role: PublicRole) -> Self {
+        match role {
+            PublicRole::Empresa => Role::Empresa,
+            PublicRole::Ong => Role::Ong,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -55,11 +75,20 @@ pub fn router() -> Router<Arc<AppState>> {
 // POST /api/auth/register - Registro de usuario, auto-alta de ONG y expedición de JWT[cite: 8, 14]
 async fn register(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterRequest>,
+    payload: Result<Json<RegisterRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
+    let Json(payload) = payload.map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "Solicitud de registro inválida".to_string(),
+        )
+    })?;
+    let role: Role = payload.role.into();
+
     // 1. Encriptar contraseña
-    let hashed_password = hash(&payload.password, DEFAULT_COST)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let hashed_password = hash(&payload.password, DEFAULT_COST).map_err(|_| internal_error())?;
+
+    let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
 
     // 2. Insertar en Supabase manejando el conflicto de email duplicado
     let user_record = sqlx::query!(
@@ -70,9 +99,9 @@ async fn register(
         "#,
         payload.email,
         hashed_password,
-        payload.role as Role
+        role as Role
     )
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
         if let Some(db_err) = e.as_database_error()
@@ -84,16 +113,13 @@ async fn register(
                     .to_string(),
             );
         }
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al crear usuario: {}", e),
-        )
+        internal_error()
     })?;
 
     // 3. Si el rol registrado es ONG, inicializar automáticamente su registro relacional[cite: 14, 16]
     if user_record.role == Role::Ong {
         let default_name = payload.email.split('@').next().unwrap_or("Organización");
-        let _ = sqlx::query!(
+        sqlx::query!(
             r#"
             INSERT INTO ngos (user_id, name, needs_description, latitude, longitude, is_verified)
             VALUES ($1, $2, $3, $4, $5, false)
@@ -105,9 +131,12 @@ async fn register(
             19.1738,
             -96.1342
         )
-        .execute(&state.db)
-        .await;
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| internal_error())?;
     }
+
+    tx.commit().await.map_err(|_| internal_error())?;
 
     // 4. Generar token JWT con vigencia de 24 horas[cite: 8]
     let expiration = chrono::Utc::now()
@@ -126,7 +155,7 @@ async fn register(
         &claims,
         &EncodingKey::from_secret(state.jwt_secret.as_ref()),
     )
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .map_err(|_| internal_error())?;
 
     Ok((
         StatusCode::CREATED,
@@ -148,14 +177,14 @@ async fn login(
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|_| internal_error())?
     .ok_or((
         StatusCode::UNAUTHORIZED,
         "Credenciales incorrectas".to_string(),
     ))?;
 
-    let is_valid = verify(&payload.password, &user_record.password_hash)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let is_valid =
+        verify(&payload.password, &user_record.password_hash).map_err(|_| internal_error())?;
 
     if !is_valid {
         return Err((
@@ -180,7 +209,7 @@ async fn login(
         &claims,
         &EncodingKey::from_secret(state.jwt_secret.as_ref()),
     )
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .map_err(|_| internal_error())?;
 
     Ok((StatusCode::OK, Json(AuthResponse { token })))
 }
@@ -195,12 +224,7 @@ async fn list_all_ngos(
     claims: Claims,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, String)> {
-    if claims.role != Role::Admin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Acceso restringido: se requieren privilegios de Administrador de TI.".to_string(),
-        ));
-    }
+    require_role(&claims, Role::Admin)?;
 
     let records = sqlx::query!(
         r#"
@@ -212,12 +236,7 @@ async fn list_all_ngos(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error BD: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     let list = records
         .into_iter()
@@ -242,12 +261,7 @@ async fn toggle_ngo_verification(
     Path(ngo_id): Path<Uuid>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    if claims.role != Role::Admin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Acceso restringido: se requieren privilegios de Administrador de TI.".to_string(),
-        ));
-    }
+    require_role(&claims, Role::Admin)?;
 
     let updated = sqlx::query!(
         r#"
@@ -258,14 +272,13 @@ async fn toggle_ngo_verification(
         "#,
         ngo_id
     )
-    .fetch_one(&state.db)
+    .fetch_optional(&state.db)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al verificar ONG: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?
+    .ok_or((
+        StatusCode::NOT_FOUND,
+        "Organización no encontrada".to_string(),
+    ))?;
 
     Ok(Json(serde_json::json!({
         "id": updated.id,

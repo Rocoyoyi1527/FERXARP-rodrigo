@@ -43,7 +43,9 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
    /tmp/ferxarp-sqlx-tools/bin/sqlx migrate run
    ```
 
-4. Desde `backend/`, ejecuta `cargo check --locked`, `cargo run --locked` y `cargo test --locked`. Verifica `http://localhost:8000/health` cuando el backend esté en ejecución.
+4. Desde `backend/`, ejecuta `cargo check --locked`, `cargo run --locked` y `cargo test --locked`. Verifica `http://localhost:8000/health` cuando el backend esté en ejecución. Los tests de autorización crean automáticamente la base local `ferxarp_security_test` y aplican sus migraciones; el usuario de PostgreSQL debe poder crear bases de datos.
+
+El seed de demostración requiere un JWT de Admin y `FERXARP_SEED_PASSWORD` en `backend/.env`. Configura una contraseña local propia antes de invocarlo; las ONG sembradas empiezan sin verificar.
 
 SQLx CLI y las macros `query!` leen `backend/.env` en el directorio de trabajo. La imagen Docker usa metadata versionada en `.sqlx` para compilar sin incluir secretos.
 

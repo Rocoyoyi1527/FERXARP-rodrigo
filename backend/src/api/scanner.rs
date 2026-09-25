@@ -8,7 +8,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{AppState, api::auth::Claims, models::user::Role};
+use crate::{
+    AppState,
+    api::{auth::Claims, middleware::internal_error},
+    models::user::Role,
+};
 
 #[derive(Deserialize)]
 pub struct ScanRequest {
@@ -68,33 +72,55 @@ async fn process_scan(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ScanRequest>,
 ) -> Result<Json<ScanResponse>, (StatusCode, String)> {
-    if !matches!(claims.role, Role::Ong | Role::Admin) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Acceso denegado: permisos insuficientes para registrar transiciones físicas."
-                .to_string(),
-        ));
+    // Entrada/Salida: Empresa propietaria o Admin. Entrega/Rechazo: ONG asignada o Admin.
+    let allowed_role = matches!(
+        (&payload.action, &claims.role),
+        (_, Role::Admin)
+            | (ScanAction::Entrada | ScanAction::Salida, Role::Empresa)
+            | (ScanAction::Entrega | ScanAction::Rechazo, Role::Ong)
+    );
+    if !allowed_role {
+        return Err((StatusCode::FORBIDDEN, "Acceso denegado".to_string()));
     }
 
     let new_status = payload.action.to_status();
+    let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
 
     // 1. Obtener estado previo
     let current = sqlx::query!(
-        r#"SELECT status FROM donations WHERE id = $1"#,
+        r#"SELECT status, user_id, assigned_ngo_id FROM donations WHERE id = $1 FOR UPDATE"#,
         payload.donation_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error BD: {}", e),
-        )
-    })?
+    .map_err(|_| internal_error())?
     .ok_or((
         StatusCode::NOT_FOUND,
         "Lote de donación no encontrado".to_string(),
     ))?;
+
+    match claims.role {
+        Role::Empresa if current.user_id != claims.sub => {
+            return Err((StatusCode::NOT_FOUND, "Lote no disponible".to_string()));
+        }
+        Role::Ong => {
+            let ngo_id = current
+                .assigned_ngo_id
+                .ok_or((StatusCode::NOT_FOUND, "Lote no disponible".to_string()))?;
+            let assigned = sqlx::query!(
+                "SELECT id FROM ngos WHERE id = $1 AND user_id = $2",
+                ngo_id,
+                claims.sub
+            )
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| internal_error())?;
+            if assigned.is_none() {
+                return Err((StatusCode::NOT_FOUND, "Lote no disponible".to_string()));
+            }
+        }
+        _ => {}
+    }
 
     // 2. Actualizar donación y registrar fecha de entrega o motivo de rechazo
     sqlx::query!(
@@ -109,14 +135,9 @@ async fn process_scan(
         payload.donation_id,
         payload.rejection_reason
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al actualizar: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
 
     // 3. Registrar auditoría inmutable en delivery_logs (Riesgo R5)
     sqlx::query!(
@@ -130,14 +151,11 @@ async fn process_scan(
         new_status,
         payload.notes.or(payload.rejection_reason)
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al auditar log: {}", e),
-        )
-    })?;
+    .map_err(|_| internal_error())?;
+
+    tx.commit().await.map_err(|_| internal_error())?;
 
     Ok(Json(ScanResponse {
         donation_id: payload.donation_id,
