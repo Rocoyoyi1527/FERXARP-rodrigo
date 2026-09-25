@@ -24,7 +24,9 @@ impl GroqClient {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            api_key: env::var("GROQ_API_KEY").ok(),
+            api_key: env::var("GROQ_API_KEY")
+                .ok()
+                .filter(|key| !key.trim().is_empty()),
         }
     }
 

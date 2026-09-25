@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
-pub mod ai;
+pub use backend::ai;
 pub mod api;
 pub mod models;
 
@@ -15,6 +15,7 @@ pub struct AppState {
     pub db: Pool<Postgres>,
     pub jwt_secret: String,
     pub seed_password: Option<String>,
+    pub chroma_url: Option<String>,
 }
 
 #[tokio::main]
@@ -31,6 +32,9 @@ async fn main() {
     let seed_password = env::var("FERXARP_SEED_PASSWORD")
         .ok()
         .filter(|value| !value.is_empty());
+    let chroma_url = env::var("CHROMA_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
 
     // 3. Establecer conexión con Supabase (PostgreSQL)
     let pool = PgPoolOptions::new()
@@ -46,6 +50,7 @@ async fn main() {
         db: pool,
         jwt_secret,
         seed_password,
+        chroma_url,
     });
 
     let app = build_router(shared_state);

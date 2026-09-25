@@ -1,18 +1,19 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, StatusCode},
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
     AppState,
     ai::{
-        chroma_db::ChromaClient,
+        chroma_db::{ChromaClient, ChromaError},
         groq::GroqClient,
         matcher::{NgoCandidate, rank_ngos_for_donation},
     },
@@ -75,11 +76,18 @@ pub struct ShipmentItem {
 pub struct ScoredMatchWithAi {
     pub ngo_id: Uuid,
     pub ngo_name: String,
-    pub distance_km: f64,
+    pub distance_km: Option<f64>,
     pub semantic_similarity: f64,
+    pub lexical_score: f64,
+    pub vector_score: f64,
     pub final_score: f64,
     pub ai_reasoning: Option<String>,
     pub ai_priority: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+struct MatchOptions {
+    include_ai: Option<bool>,
 }
 
 // --- ENRUTADOR ---
@@ -212,64 +220,56 @@ async fn list_available_feed(
     Ok(Json(feed))
 }
 
-// GET /api/donations/{id}/matches - Matching híbrido (Léxico + ChromaDB + DeepSeek-R1)
+// GET /api/donations/{id}/matches - Base lexical/vectorial; Groq is optional enrichment.
 async fn get_donation_matches(
     _claims: Claims,
     Path(donation_id): Path<Uuid>,
+    Query(options): Query<MatchOptions>,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<ScoredMatchWithAi>>, (StatusCode, String)> {
+) -> Result<(HeaderMap, Json<Vec<ScoredMatchWithAi>>), (StatusCode, String)> {
     let donation = sqlx::query!(
         r#"SELECT title, description FROM donations WHERE id = $1"#,
         donation_id
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|_| internal_error())?
     .ok_or((StatusCode::NOT_FOUND, "Donación no encontrada".to_string()))?;
 
     let search_text = format!(
         "{} {}",
         donation.title,
         donation.description.clone().unwrap_or_default()
-    )
-    .to_lowercase();
+    );
 
-    // 1. Similitud vectorial en ChromaDB (Vec<(Uuid, f64)>)
-    let chroma = ChromaClient::new(None);
-    let mut similarities = chroma
-        .query_similar_ngos(&search_text, 10)
-        .await
-        .unwrap_or_default();
-
-    // 2. Candidatos en Supabase
+    // PostgreSQL is the source of truth; Chroma is a derived search index.
     let ngos_records =
         sqlx::query!(r#"SELECT id, name, needs_description, latitude, longitude FROM ngos"#)
             .fetch_all(&state.db)
             .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            .map_err(|_| internal_error())?;
+    let candidate_ids: Vec<Uuid> = ngos_records.iter().map(|ngo| ngo.id).collect();
 
-    // Boost léxico directo sobre Vec<(Uuid, f64)>
-    for ngo in &ngos_records {
-        let needs_lower = ngo
-            .needs_description
-            .clone()
-            .unwrap_or_default()
-            .to_lowercase();
-        let has_direct_match = (search_text.contains("leche") && needs_lower.contains("leche"))
-            || (search_text.contains("alimento") && needs_lower.contains("alimento"))
-            || (search_text.contains("abarrote") && needs_lower.contains("alimento"))
-            || (search_text.contains("fruta") && needs_lower.contains("alimento"))
-            || (search_text.contains("servidor") && needs_lower.contains("computadora"))
-            || (search_text.contains("laptop") && needs_lower.contains("computadora"));
-
-        if has_direct_match {
-            if let Some(pos) = similarities.iter().position(|(id, _)| *id == ngo.id) {
-                similarities[pos].1 = 0.94;
-            } else {
-                similarities.push((ngo.id, 0.94));
-            }
+    let vector_result = match state
+        .chroma_url
+        .as_deref()
+        .ok_or(ChromaError::MissingConfiguration)
+        .and_then(ChromaClient::new)
+    {
+        Ok(chroma) => {
+            chroma
+                .query_similar_ngos_for(&search_text, candidate_ids.len().max(1), &candidate_ids)
+                .await
         }
-    }
+        Err(error) => Err(error),
+    };
+    let (vector_scores, matching_mode) = match vector_result {
+        Ok(scores) => (Some(scores), "hybrid"),
+        Err(error) => {
+            warn!(error = %error, "chroma unavailable; fallback lexical");
+            (None, "lexical_fallback")
+        }
+    };
 
     let candidates: Vec<NgoCandidate> = ngos_records
         .into_iter()
@@ -283,7 +283,14 @@ async fn get_donation_matches(
         })
         .collect();
 
-    let ranked = rank_ngos_for_donation(19.1738, -96.1342, &similarities, &candidates, 50.0);
+    let ranked = rank_ngos_for_donation(
+        19.1738,
+        -96.1342,
+        &search_text,
+        vector_scores.as_deref(),
+        &candidates,
+        50.0,
+    );
 
     // 3. Puntuación y razonamiento con DeepSeek-R1 (Groq)
     let groq = GroqClient::new();
@@ -294,7 +301,7 @@ async fn get_donation_matches(
         let mut ai_reasoning = None;
         let mut ai_priority = None;
 
-        if idx < 4 {
+        if options.include_ai.unwrap_or(true) && idx < 4 && m.distance_km.is_some() {
             let candidate_needs = candidates
                 .iter()
                 .find(|c| c.id == m.ngo_id)
@@ -307,7 +314,7 @@ async fn get_donation_matches(
                     donation.description.as_deref().unwrap_or(""),
                     &m.ngo_name,
                     candidate_needs,
-                    m.distance_km,
+                    m.distance_km.unwrap_or_default(),
                 )
                 .await
             {
@@ -322,14 +329,22 @@ async fn get_donation_matches(
             ngo_name: m.ngo_name,
             distance_km: m.distance_km,
             semantic_similarity: m.semantic_similarity,
+            lexical_score: m.lexical_score,
+            vector_score: m.vector_score,
             final_score,
             ai_reasoning,
             ai_priority,
         });
     }
 
-    enriched_matches.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
-    Ok(Json(enriched_matches))
+    enriched_matches.sort_by(|a, b| {
+        b.final_score
+            .total_cmp(&a.final_score)
+            .then_with(|| a.ngo_id.cmp(&b.ngo_id))
+    });
+    let mut headers = HeaderMap::new();
+    headers.insert("x-matching-mode", HeaderValue::from_static(matching_mode));
+    Ok((headers, Json(enriched_matches)))
 }
 
 // POST /api/donations/{id}/request - Solicitud de donación

@@ -201,7 +201,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
                   </text>
                   <text x={24} y={13} fill="#8fa896" fontSize="9.5" className="font-mono">
                     {isDonationMode
-                      ? isMatch(item) ? `Compatibilidad: ${item.final_score.toFixed(1)}% | ${item.distance_km.toFixed(1)} km` : "Organización Verificada"
+                      ? isMatch(item) ? `Prioridad: ${item.final_score.toFixed(1)}/100 | ${item.distance_km === null ? "distancia no disponible" : `${item.distance_km.toFixed(1)} km`}` : "Organización Verificada"
                       : "Organización Verificada"}
                   </text>
                 </g>
@@ -216,7 +216,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
         <div className="mt-4 p-4 rounded-xl bg-garden-dark/95 border border-garden-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-garden-surface border border-garden-emerald/40 flex items-center justify-center font-mono font-bold text-sm text-garden-sprout shrink-0">
-              {activeMatch.final_score.toFixed(0)}%
+              {activeMatch.final_score.toFixed(0)}
             </div>
             <div>
               <p className="text-xs font-semibold text-white flex items-center gap-2">
@@ -228,7 +228,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
                 )}
               </p>
               <p className="text-[11px] text-garden-sage mt-0.5">
-                Similitud semántica: {(activeMatch.semantic_similarity * 100).toFixed(1)}% | Distancia: {activeMatch.distance_km.toFixed(1)} km
+                Puntaje de contenido: {(activeMatch.semantic_similarity * 100).toFixed(1)}/100 | Distancia: {activeMatch.distance_km === null ? "no disponible" : `${activeMatch.distance_km.toFixed(1)} km`}
               </p>
               {activeMatch.ai_reasoning && (
                 <p className="text-[11px] text-emerald-300/90 italic mt-1 bg-garden-surface/60 px-2.5 py-1 rounded border border-garden-border/40">

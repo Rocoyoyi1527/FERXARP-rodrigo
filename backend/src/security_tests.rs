@@ -15,7 +15,15 @@ use tokio::sync::OnceCell;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::{AppState, api::auth::Claims, models::user::Role};
+use crate::{
+    AppState,
+    ai::{
+        chroma_db::ChromaClient,
+        index::{NgoIndexRecord, upsert_ngo},
+    },
+    api::auth::Claims,
+    models::user::Role,
+};
 use backend::admin_bootstrap::{
     ProvisionConfig, ProvisionError, ProvisionOutcome, provision_admin,
 };
@@ -87,11 +95,212 @@ async fn app() -> (Router, PgPool) {
 }
 
 fn router_for(pool: &PgPool) -> Router {
+    router_for_with_chroma(pool, None)
+}
+
+fn router_for_with_chroma(pool: &PgPool, chroma_url: Option<String>) -> Router {
+    router_for_with_config(pool, chroma_url, None)
+}
+
+fn router_for_with_config(
+    pool: &PgPool,
+    chroma_url: Option<String>,
+    seed_password: Option<String>,
+) -> Router {
     super::build_router(Arc::new(AppState {
         db: pool.clone(),
         jwt_secret: SECRET.to_string(),
-        seed_password: None,
+        seed_password,
+        chroma_url,
     }))
+}
+
+#[tokio::test]
+async fn seed_veracruz_reuses_chroma_index_without_groq() {
+    let pool = pool().await;
+    dotenv::dotenv().ok();
+    let url = std::env::var("CHROMA_URL").expect("Local CHROMA_URL required");
+    let parsed = reqwest::Url::parse(&url).unwrap();
+    assert!(matches!(
+        parsed.host_str(),
+        Some("localhost" | "127.0.0.1" | "::1")
+    ));
+    let chroma = ChromaClient::new(&url).unwrap();
+    let app = router_for_with_config(&pool, Some(url), Some(Uuid::new_v4().to_string()));
+    let admin = user(&pool, Role::Admin).await;
+    let admin_token = token(admin, Role::Admin);
+
+    for _ in 0..2 {
+        let (status, body) = send(
+            &app,
+            "POST",
+            "/api/seed/veracruz?include_ai=false",
+            Some(&admin_token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["ngos_seeded"], 5);
+        assert_eq!(body["ai_evaluations"].as_array().unwrap().len(), 0);
+    }
+    let bank_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM ngos WHERE name = 'Banco de Alimentos de Veracruz (AMBA)'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let document = chroma.get_document(bank_id).await.unwrap().unwrap();
+    assert!(document.contains("leche"));
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ngos WHERE id = $1")
+        .bind(bank_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn new_ngo_registration_indexes_its_postgres_profile() {
+    let pool = pool().await;
+    dotenv::dotenv().ok();
+    let url = std::env::var("CHROMA_URL").expect("Local CHROMA_URL required");
+    let parsed = reqwest::Url::parse(&url).unwrap();
+    assert!(matches!(
+        parsed.host_str(),
+        Some("localhost" | "127.0.0.1" | "::1")
+    ));
+    let chroma = ChromaClient::new(&url).unwrap();
+    let app = router_for_with_chroma(&pool, Some(url));
+    let email = format!("{}@test.local", Uuid::new_v4());
+    let (status, _) = send(
+        &app,
+        "POST",
+        "/api/auth/register",
+        None,
+        Some(json!({
+            "email": email,
+            "password": Uuid::new_v4().to_string(),
+            "role": "ong"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let ngo_id: Uuid = sqlx::query_scalar(
+        "SELECT n.id FROM ngos n JOIN users u ON n.user_id = u.id WHERE u.email = $1",
+    )
+    .bind(email)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let document = chroma.get_document(ngo_id).await.unwrap().unwrap();
+    assert!(document.contains("Recepción y distribución comunitaria"));
+}
+
+async fn matching_response(
+    app: &Router,
+    donation_id: Uuid,
+    owner: Uuid,
+) -> (StatusCode, String, Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/donations/{donation_id}/matches?include_ai=false"
+                ))
+                .header(
+                    "authorization",
+                    format!("Bearer {}", token(owner, Role::Empresa)),
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let mode = response
+        .headers()
+        .get("x-matching-mode")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    (status, mode, serde_json::from_slice(&body).unwrap())
+}
+
+async fn matching_scenario(pool: &PgPool) -> (Uuid, Uuid, Uuid, NgoIndexRecord, NgoIndexRecord) {
+    let owner = user(pool, Role::Empresa).await;
+    let milk_user = user(pool, Role::Ong).await;
+    let computer_user = user(pool, Role::Ong).await;
+    let milk_id = ngo(pool, milk_user, true).await;
+    let computer_id = ngo(pool, computer_user, true).await;
+    let milk = NgoIndexRecord {
+        id: milk_id,
+        name: "Banco de Alimentos".into(),
+        needs_description: Some("leche y lácteos".into()),
+    };
+    let computers = NgoIndexRecord {
+        id: computer_id,
+        name: "Centro de Cómputo".into(),
+        needs_description: Some("computadoras y laptops".into()),
+    };
+    for record in [&milk, &computers] {
+        sqlx::query("UPDATE ngos SET name = $1, needs_description = $2, latitude = 19.1738, longitude = -96.1342 WHERE id = $3")
+            .bind(&record.name).bind(&record.needs_description).bind(record.id).execute(pool).await.unwrap();
+    }
+    let donation_id: Uuid = sqlx::query_scalar("INSERT INTO donations (user_id, title, description, quantity) VALUES ($1, 'Leche', 'lácteos', 2) RETURNING id")
+        .bind(owner).fetch_one(pool).await.unwrap();
+    (owner, donation_id, milk_id, milk, computers)
+}
+
+#[tokio::test]
+async fn matching_endpoint_hybrid_without_groq() {
+    let pool = pool().await;
+    dotenv::dotenv().ok();
+    let url = std::env::var("CHROMA_URL").expect("Local CHROMA_URL required");
+    let parsed = reqwest::Url::parse(&url).unwrap();
+    assert!(matches!(
+        parsed.host_str(),
+        Some("localhost" | "127.0.0.1" | "::1")
+    ));
+    let chroma = ChromaClient::new(&url).unwrap();
+    let (owner, donation_id, milk_id, milk, computers) = matching_scenario(&pool).await;
+    upsert_ngo(&chroma, &milk).await.unwrap();
+    upsert_ngo(&chroma, &computers).await.unwrap();
+    let (status, mode, body) = matching_response(
+        &router_for_with_chroma(&pool, Some(url)),
+        donation_id,
+        owner,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(mode, "hybrid");
+    let rows = body.as_array().unwrap();
+    let milk_row = rows
+        .iter()
+        .find(|row| row["ngo_id"] == milk_id.to_string())
+        .unwrap();
+    assert!(milk_row["lexical_score"].as_f64().unwrap() > 0.0);
+    assert!(milk_row["vector_score"].as_f64().unwrap() > 0.0);
+    assert!(milk_row["ai_reasoning"].is_null());
+}
+
+#[tokio::test]
+async fn matching_endpoint_reports_lexical_fallback_when_chroma_is_down() {
+    let pool = pool().await;
+    let (owner, donation_id, milk_id, _, _) = matching_scenario(&pool).await;
+    let app = router_for_with_chroma(&pool, Some("http://127.0.0.1:1".into()));
+    let (status, mode, body) = matching_response(&app, donation_id, owner).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(mode, "lexical_fallback");
+    let milk_row = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["ngo_id"] == milk_id.to_string())
+        .unwrap();
+    assert!(milk_row["lexical_score"].as_f64().unwrap() > 0.0);
+    assert_eq!(milk_row["vector_score"].as_f64().unwrap(), 0.0);
 }
 
 async fn send(

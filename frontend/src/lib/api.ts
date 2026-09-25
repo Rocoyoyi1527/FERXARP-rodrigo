@@ -77,8 +77,10 @@ export interface ShipmentItem {
 export interface ScoredMatch {
   ngo_id: string;
   ngo_name: string;
-  distance_km: number;
+  distance_km: number | null;
   semantic_similarity: number;
+  lexical_score: number;
+  vector_score: number;
   final_score: number;
   ai_reasoning: string | null;
   ai_priority: string | null;

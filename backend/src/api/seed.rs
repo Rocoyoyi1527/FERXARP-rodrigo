@@ -1,17 +1,21 @@
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     routing::{get, post},
 };
 use bcrypt::{DEFAULT_COST, hash};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
     AppState,
-    ai::{chroma_db::ChromaClient, groq::GroqClient},
+    ai::{
+        chroma_db::ChromaClient,
+        groq::GroqClient,
+        index::{NgoIndexRecord, upsert_ngo},
+    },
     api::{
         auth::Claims,
         middleware::{internal_error, require_role},
@@ -35,6 +39,11 @@ pub struct SeedResponse {
     pub ngos_seeded: usize,
     pub donations_seeded: usize,
     pub ai_evaluations: Vec<AiMatchEvaluation>,
+}
+
+#[derive(Default, Deserialize)]
+struct SeedOptions {
+    include_ai: Option<bool>,
 }
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -63,11 +72,29 @@ struct NgoSeed {
 // POST /api/seed/veracruz - Ingesta idempotente con evaluación DeepSeek-R1
 async fn seed_veracruz_data(
     claims: Claims,
+    Query(options): Query<SeedOptions>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SeedResponse>, (StatusCode, String)> {
     require_role(&claims, Role::Admin)?;
     let seed_password = state.seed_password.as_deref().ok_or_else(internal_error)?;
     let default_password = hash(seed_password, DEFAULT_COST).map_err(|_| internal_error())?;
+    let chroma = state
+        .chroma_url
+        .as_deref()
+        .ok_or(())
+        .and_then(|url| ChromaClient::new(url).map_err(|_| ()))
+        .map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "ChromaDB no está configurada".to_string(),
+            )
+        })?;
+    chroma.health().await.map_err(|_| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ChromaDB no está disponible".to_string(),
+        )
+    })?;
 
     let companies = vec![
         CompanySeed {
@@ -217,7 +244,6 @@ async fn seed_veracruz_data(
     }
 
     // 2. Sembrado de ONGs e Indexación Vectorial
-    let chroma = ChromaClient::new(None);
     let mut ngos_list = Vec::new();
 
     for ngo in &ngos {
@@ -235,29 +261,27 @@ async fn seed_veracruz_data(
         .await
         .map_err(|_| internal_error())?;
 
-        let ngo_row = sqlx::query!(
-            "SELECT id FROM ngos WHERE name = $1 OR user_id = $2",
-            ngo.name,
-            user_row.id
-        )
-        .fetch_optional(&state.db)
-        .await
-        .unwrap_or(None);
+        let ngo_row = sqlx::query!("SELECT id FROM ngos WHERE user_id = $1", user_row.id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
 
         let final_ngo_id = if let Some(rec) = ngo_row {
             let _ = sqlx::query!(
                 r#"
                 UPDATE ngos 
-                SET needs_description = $1, latitude = $2, longitude = $3
-                WHERE id = $4
+                SET name = $1, needs_description = $2, latitude = $3, longitude = $4
+                WHERE id = $5
                 "#,
+                ngo.name,
                 ngo.needs,
                 ngo.lat,
                 ngo.lon,
                 rec.id
             )
             .execute(&state.db)
-            .await;
+            .await
+            .map_err(|_| internal_error())?;
             rec.id
         } else {
             let new_id = Uuid::new_v4();
@@ -274,11 +298,25 @@ async fn seed_veracruz_data(
                 ngo.lon
             )
             .execute(&state.db)
-            .await;
+            .await
+            .map_err(|_| internal_error())?;
             new_id
         };
 
-        let _ = chroma.add_or_update_ngo(final_ngo_id, ngo.needs).await;
+        let indexed_ngo = sqlx::query_as::<_, NgoIndexRecord>(
+            "SELECT id, name, needs_description FROM ngos WHERE id = $1",
+        )
+        .bind(final_ngo_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| internal_error())?;
+
+        upsert_ngo(&chroma, &indexed_ngo).await.map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "No se pudo indexar la ONG en ChromaDB; ejecute reindex_chroma".to_string(),
+            )
+        })?;
         ngos_list.push((
             final_ngo_id,
             ngo.name.to_string(),
@@ -292,7 +330,15 @@ async fn seed_veracruz_data(
     let groq = GroqClient::new();
     let mut ai_evaluations = Vec::new();
 
-    for (_don_id, title, desc) in all_created_donations.iter().take(4) {
+    for (_don_id, title, desc) in
+        all_created_donations
+            .iter()
+            .take(if options.include_ai.unwrap_or(true) {
+                4
+            } else {
+                0
+            })
+    {
         let mut best_score = 0.0;
         let mut best_eval: Option<AiMatchEvaluation> = None;
 
@@ -319,7 +365,7 @@ async fn seed_veracruz_data(
     }
 
     Ok(Json(SeedResponse {
-        message: "Ecosistema poblado y puntuado con Groq AI.".to_string(),
+        message: "Ecosistema poblado e indexado en ChromaDB; Groq es opcional.".to_string(),
         companies_seeded: companies.len(),
         ngos_seeded: ngos.len(),
         donations_seeded: seeded_donations_count,

@@ -19,15 +19,27 @@ services:
 
   # 1. Base de datos vectorial
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:1.5.0
     container_name: fexarp-chromadb
     ports:
-      - "8001:8000"
+      - "${CHROMA_PORT:-8001}:8000"
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
     environment:
-      - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8000;
+          printf 'GET /api/v2/heartbeat HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3;
+          IFS= read -r line <&3;
+          [[ "$$line" == *" 200 "* ]]
+      interval: 10s
+      timeout: 3s
+      retries: 12
     restart: unless-stopped
     networks:
       - fexarp-network
@@ -49,8 +61,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      chromadb:
-        condition: service_started
     restart: unless-stopped
     networks:
       - fexarp-network

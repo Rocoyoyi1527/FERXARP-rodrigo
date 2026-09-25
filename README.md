@@ -45,7 +45,15 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
 
 4. Desde `backend/`, ejecuta `cargo check --locked`, `cargo run --locked` y `cargo test --locked`. Verifica `http://localhost:8000/health` cuando el backend esté en ejecución. Los tests de autorización crean automáticamente la base local `ferxarp_security_test` y aplican sus migraciones; el usuario de PostgreSQL debe poder crear bases de datos.
 
-El seed de demostración requiere un JWT de Admin y `FERXARP_SEED_PASSWORD` en `backend/.env`. Configura una contraseña local propia antes de invocarlo; las ONG sembradas empiezan sin verificar.
+El seed de demostración requiere un JWT de Admin y `FERXARP_SEED_PASSWORD` en `backend/.env`. Configura una contraseña local propia antes de invocarlo; las ONG sembradas empiezan sin verificar. Para poblar e indexar sin enriquecimiento Groq, usa `POST /api/seed/veracruz?include_ai=false`.
+
+## ChromaDB y matching local
+
+Levanta PostgreSQL y ChromaDB con `docker compose up -d postgres chromadb`; espera a que ambos aparezcan como `healthy` en `docker compose ps`. Para ejecutar el backend fuera de Docker, usa `CHROMA_URL=http://localhost:8001` en `backend/.env`. Dentro de Compose se usa `http://chromadb:8000`. ChromaDB 1.5.0 persiste su índice en un volumen Docker; PostgreSQL conserva los perfiles y necesidades originales.
+
+Desde `backend/`, ejecuta `cargo run --locked --bin reindex_chroma` para reconstruir la colección `ngo_needs` desde todas las ONG de PostgreSQL. El comando informa cuántas procesó, indexó y falló; puede repetirse sin duplicar documentos. Si encuentra esa colección derivada con una métrica anterior incompatible, la reemplaza y la reconstruye desde PostgreSQL. El registro de ONG y el seed protegido usan el mismo servicio de indexación. Si Chroma falla durante un registro, la cuenta permanece en PostgreSQL y el log indica que debe reindexarse. Los tests de integración requieren Chroma y PostgreSQL locales levantados.
+
+`GET /api/donations/{id}/matches?include_ai=false` comprueba el matching sin Groq. La cabecera `X-Matching-Mode` indica `hybrid` cuando Chroma respondió o `lexical_fallback` cuando falta, falla o agota el tiempo de espera. La respuesta incluye `lexical_score`, `vector_score` y `semantic_similarity` (su combinación); la consulta vectorial se limita a los UUID de ONG presentes en PostgreSQL. Si no hay coincidencia de contenido, la lista queda vacía. Los vectores son rasgos locales deterministas con sinónimos de dominio: permiten búsqueda coseno reproducible sin descargar un modelo; su alcance semántico es limitado. Chroma usa distancia coseno; `vector_score = clamp(1 - distancia, 0, 1)`. Si Chroma cae, login, donaciones y envíos siguen funcionando y el matching usa solo la parte léxica.
 
 ## Provisionar administrador inicial
 

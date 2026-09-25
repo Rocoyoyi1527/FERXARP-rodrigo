@@ -8,10 +8,15 @@ use bcrypt::{DEFAULT_COST, hash, verify};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
     AppState,
+    ai::{
+        chroma_db::ChromaClient,
+        index::{NgoIndexRecord, upsert_ngo},
+    },
     api::middleware::{internal_error, require_role},
     models::user::Role,
 };
@@ -117,7 +122,7 @@ async fn register(
     })?;
 
     // 3. Si el rol registrado es ONG, inicializar automáticamente su registro relacional[cite: 14, 16]
-    if user_record.role == Role::Ong {
+    let indexed_ngo = if user_record.role == Role::Ong {
         let default_name = payload.email.split('@').next().unwrap_or("Organización");
         sqlx::query!(
             r#"
@@ -134,9 +139,38 @@ async fn register(
         .execute(&mut *tx)
         .await
         .map_err(|_| internal_error())?;
-    }
+        Some(
+            sqlx::query_as::<_, NgoIndexRecord>(
+                "SELECT id, name, needs_description FROM ngos WHERE user_id = $1",
+            )
+            .bind(user_record.id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| internal_error())?,
+        )
+    } else {
+        None
+    };
 
     tx.commit().await.map_err(|_| internal_error())?;
+
+    if let Some(ngo) = indexed_ngo {
+        let indexed = state
+            .chroma_url
+            .as_deref()
+            .ok_or(crate::ai::chroma_db::ChromaError::MissingConfiguration)
+            .and_then(ChromaClient::new);
+        match indexed {
+            Ok(chroma) => {
+                if let Err(error) = upsert_ngo(&chroma, &ngo).await {
+                    warn!(ngo_id = %ngo.id, error = %error, "ngo registration committed; chroma reindex required");
+                }
+            }
+            Err(error) => {
+                warn!(ngo_id = %ngo.id, error = %error, "ngo registration committed; chroma reindex required")
+            }
+        }
+    }
 
     // 4. Generar token JWT con vigencia de 24 horas[cite: 8]
     let expiration = chrono::Utc::now()
