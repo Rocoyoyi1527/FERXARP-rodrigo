@@ -1,0 +1,11 @@
+{
+  "phase": "before",
+  "frontend_url": "http://localhost:13004",
+  "backend_url": "http://127.0.0.1:18004",
+  "browser": "Chromium headless via ChromeDriver",
+  "markers_rendered": 3,
+  "stored_payload": "<img src=x onerror=alert(1)>",
+  "alert_observed": true,
+  "alert_text": "1",
+  "raw_img_onerror_in_popup": true
+}

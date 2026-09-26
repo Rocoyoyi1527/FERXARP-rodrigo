@@ -1,24 +1,28 @@
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiErrorMessage, isApiError } from "@/lib/api";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
 interface DonationFormProps {
-  onDonationCreated: () => void;
+  onDonationCreated: () => Promise<void> | void;
 }
 
 export function DonationForm({ onDonationCreated }: DonationFormProps) {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
     try {
       await api.createDonation({
         title,
@@ -27,9 +31,14 @@ export function DonationForm({ onDonationCreated }: DonationFormProps) {
       });
       setTitle("");
       setDescription("");
-      onDonationCreated();
-    } catch (err: any) {
-      setError(err.message);
+      await onDonationCreated();
+      setSuccess("Donación publicada y disponible para solicitudes.");
+    } catch (error) {
+      setError(apiErrorMessage(error));
+      if (isApiError(error, 401)) {
+        localStorage.removeItem("fexarp_token");
+        router.push("/login");
+      }
     } finally {
       setLoading(false);
     }
@@ -38,6 +47,7 @@ export function DonationForm({ onDonationCreated }: DonationFormProps) {
   return (
     <Card title="Registrar Donación" subtitle="Publica excedentes de stock para ONGs" className="h-fit">
       {error && <div className="mb-3 text-xs text-rose-400 bg-rose-950/40 p-2 rounded">{error}</div>}
+      {success && <div role="status" className="mb-3 text-xs text-garden-sprout bg-garden-emerald/10 p-2 rounded">{success}</div>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Título del lote"
@@ -60,7 +70,7 @@ export function DonationForm({ onDonationCreated }: DonationFormProps) {
           required
         />
         <Button type="submit" disabled={loading} className="w-full">
-          {loading ? "Registrando..." : "Guardar en Supabase"}
+          {loading ? "Registrando..." : "Publicar donación"}
         </Button>
       </form>
     </Card>

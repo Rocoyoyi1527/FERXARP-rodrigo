@@ -1,15 +1,44 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ferxarp}
+      POSTGRES_USER: ${POSTGRES_USER:-ferxarp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferxarp_local_only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - fexarp-network
+
   # 1. Base de datos vectorial
   chromadb:
-    image: chromadb/chroma:latest
-    container_name: fexarp-chromadb
+    image: chromadb/chroma:1.5.0
     ports:
-      - "8001:8000"
+      - "${CHROMA_PORT:-8001}:8000"
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
     environment:
-      - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8000;
+          printf 'GET /api/v2/heartbeat HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3;
+          IFS= read -r line <&3;
+          [[ "$$line" == *" 200 "* ]]
+      interval: 10s
+      timeout: 3s
+      retries: 12
     restart: unless-stopped
     networks:
       - fexarp-network
@@ -19,16 +48,24 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: fexarp-backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     env_file:
-      - ./backend/.env
+      - ${BACKEND_ENV_FILE:-./backend/.env}
     environment:
       - PORT=8000
       - CHROMA_URL=http://chromadb:8000
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:3000}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-ferxarp}:${POSTGRES_PASSWORD:-ferxarp_local_only}@postgres:5432/${POSTGRES_DB:-ferxarp}
     depends_on:
-      - chromadb
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
     networks:
       - fexarp-network
@@ -38,18 +75,28 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: fexarp-frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-8000}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
     networks:
       - fexarp-network
 
 volumes:
+  postgres_data:
+    driver: local
   chroma_data:
     driver: local
 

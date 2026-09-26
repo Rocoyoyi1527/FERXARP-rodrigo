@@ -2,3 +2,5 @@
 *.env
 .env*.local
 backend/.env
+/ci-artifacts/
+.scannerwork/

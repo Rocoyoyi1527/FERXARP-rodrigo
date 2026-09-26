@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT status, assigned_ngo_id FROM donations WHERE id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "assigned_ngo_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "donations",
+            "name": "assigned_ngo_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "dcb43332acd18571ca0880200a13c7a5a4fd0ebceddad3b5903491bff085486f"
+}

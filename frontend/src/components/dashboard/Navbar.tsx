@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { api, UserClaims } from "@/lib/api";
+import { api, apiErrorMessage, isApiError, UserClaims } from "@/lib/api";
 
 interface NavbarProps {
   user: UserClaims | null;
@@ -10,7 +10,7 @@ interface NavbarProps {
 }
 
 interface AiMatch {
-  donation_title: String;
+  donation_title: string;
   recommended_ngo: string;
   score: number;
   priority: string;
@@ -28,20 +28,22 @@ export function Navbar({ user, onLogout }: NavbarProps) {
   const [seeding, setSeeding] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [seedResult, setSeedResult] = useState<SeedSummary | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
 
   const executeSeed = async () => {
     setShowConfirmModal(false);
     setSeeding(true);
     try {
-      const res: any = await api.seedVeracruzData();
+      const res = await api.seedVeracruzData();
       setSeedResult({
         companies_seeded: res.companies_seeded,
         ngos_seeded: res.ngos_seeded,
         donations_seeded: res.donations_seeded,
         ai_evaluations: res.ai_evaluations || [],
       });
-    } catch (err: any) {
-      alert(err.message || "Error al poblar los datos.");
+    } catch (error) {
+      setSeedError(apiErrorMessage(error));
+      if (isApiError(error, 401)) onLogout();
     } finally {
       setSeeding(false);
     }
@@ -105,7 +107,7 @@ export function Navbar({ user, onLogout }: NavbarProps) {
               Mapa de Almacenes
             </Link>
 
-            <button
+            {user.role === "admin" && <button
               type="button"
               disabled={seeding}
               onClick={() => setShowConfirmModal(true)}
@@ -113,7 +115,7 @@ export function Navbar({ user, onLogout }: NavbarProps) {
             >
               <span>✨</span>
               <span>{seeding ? "Evaluando con IA..." : "Poblar Localidad"}</span>
-            </button>
+            </button>}
 
             <div className="flex items-center gap-1.5 bg-garden-dark border border-garden-border px-3 py-1 rounded-full text-xs">
               <span className="text-garden-sage text-[11px]">Cuenta:</span>
@@ -129,6 +131,8 @@ export function Navbar({ user, onLogout }: NavbarProps) {
           </nav>
         )}
       </header>
+
+      {seedError && <p role="status" className="mx-auto mb-4 max-w-6xl rounded-xl border border-rose-800 p-3 text-xs text-rose-300">{seedError}</p>}
 
       {/* MODAL 1: Confirmación */}
       {showConfirmModal && (

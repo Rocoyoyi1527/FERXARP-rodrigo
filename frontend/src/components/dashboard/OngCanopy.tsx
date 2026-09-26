@@ -1,45 +1,73 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, FeedDonationItem, DonationItem } from "@/lib/api";
+import { api, apiErrorMessage, FeedDonationItem, isApiError, ShipmentItem } from "@/lib/api";
 import { StockScanner } from "@/components/scanner/StockScanner";
+import { useRouter } from "next/navigation";
 
 export function OngCanopy() {
   const [feed, setFeed] = useState<FeedDonationItem[]>([]);
-  const [myDonations, setMyDonations] = useState<DonationItem[]>([]);
+  const router = useRouter();
+  const [myDonations, setMyDonations] = useState<ShipmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestingId, setRequestingId] = useState<string | null>(null);
-  const [scanActiveId, setScanActiveId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ id: string; text: string; error?: boolean } | null>(null);
 
   const loadData = async () => {
     try {
       const [feedData, assignedData] = await Promise.all([
         api.getDonationFeed(),
-        api.listDonations(),
+        api.getShipments(),
       ]);
       setFeed(feedData);
       setMyDonations(assignedData);
-    } catch (err) {
-      console.error("Error al cargar datos de la organización:", err);
+    } catch (error) {
+      if (isApiError(error, 401)) {
+        localStorage.removeItem("fexarp_token");
+        router.replace("/login");
+      } else {
+        setFeedbackMsg({ id: "global", text: apiErrorMessage(error), error: true });
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let active = true;
+    Promise.all([api.getDonationFeed(), api.getShipments()])
+      .then(([available, requested]) => {
+        if (!active) return;
+        setFeed(available);
+        setMyDonations(requested);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        if (isApiError(error, 401)) {
+          localStorage.removeItem("fexarp_token");
+          router.replace("/login");
+        } else {
+          setFeedbackMsg({ id: "global", text: apiErrorMessage(error), error: true });
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [router]);
 
   const handleRequest = async (id: string) => {
     setRequestingId(id);
     setFeedbackMsg(null);
     try {
       await api.requestDonation(id);
-      setFeedbackMsg({ id, text: "¡Donación solicitada! Pasó a tu bandeja de envíos en curso." });
+      setFeedbackMsg({ id: "global", text: "Solicitud registrada. La Empresa debe aprobarla antes de la salida." });
       await loadData();
-    } catch (err: any) {
-      setFeedbackMsg({ id, text: err.message || "No fue posible apartar la donación.", error: true });
+    } catch (error) {
+      setFeedbackMsg({ id: "global", text: apiErrorMessage(error), error: true });
+      if (isApiError(error, 409)) await loadData();
+      if (isApiError(error, 401)) {
+        localStorage.removeItem("fexarp_token");
+        router.replace("/login");
+      }
     } finally {
       setRequestingId(null);
     }
@@ -55,6 +83,11 @@ export function OngCanopy() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {feedbackMsg && (
+        <p role="status" className={`lg:col-span-12 rounded-xl border px-3 py-2 text-xs ${feedbackMsg.error ? "border-rose-800 text-rose-300" : "border-garden-emerald text-garden-sprout"}`}>
+          {feedbackMsg.text}
+        </p>
+      )}
       {/* Columna Izquierda: Donaciones Disponibles */}
       <div className="lg:col-span-7 space-y-4">
         <div className="border border-garden-border bg-garden-surface/80 backdrop-blur-md rounded-2xl p-5 shadow-garden-glow">
@@ -114,17 +147,6 @@ export function OngCanopy() {
                     </button>
                   </div>
 
-                  {feedbackMsg?.id === item.id && (
-                    <div
-                      className={`text-[11px] font-mono px-3 py-1.5 rounded-lg border ${
-                        feedbackMsg.error
-                          ? "bg-rose-950/40 border-rose-800/60 text-rose-300"
-                          : "bg-emerald-950/40 border-emerald-500/50 text-garden-sprout"
-                      }`}
-                    >
-                      {feedbackMsg.text}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -137,7 +159,7 @@ export function OngCanopy() {
         <div className="border border-garden-border bg-garden-surface/80 backdrop-blur-md rounded-2xl p-5 shadow-garden-glow">
           <div className="flex justify-between items-center mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-white tracking-tight">Mis Solicitudes y Envíos en Curso</h2>
+              <h2 className="text-sm font-semibold text-white tracking-tight">Mis Solicitudes y Entregas</h2>
               <p className="text-[11px] text-garden-sage">Insumos apartados para recepción física y control de entrega</p>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-garden-dark border border-garden-border text-garden-leaf">
@@ -161,25 +183,18 @@ export function OngCanopy() {
                       </p>
                     </div>
                     <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-garden-surface border border-garden-border text-garden-leaf">
-                      {d.status || "reservado"}
+                      {d.donation_status === "reservado" && d.request_status === "pendiente" ? "Pendiente de aprobación" :
+                        d.donation_status === "reservado" ? "Aprobada — pendiente de salida" : d.donation_status.replaceAll("_", " ")}
                     </span>
                   </div>
-
-                  <div className="mt-3 pt-2.5 border-t border-garden-border/40 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setScanActiveId(scanActiveId === d.id ? null : d.id)}
-                      className="text-[11px] font-mono text-garden-sage hover:text-white px-2 py-1 rounded bg-garden-surface border border-garden-border transition cursor-pointer"
-                    >
-                      {scanActiveId === d.id ? "Cerrar Escáner" : "Registrar Recepción / Incidencia"}
-                    </button>
-                  </div>
-
-                  {scanActiveId === d.id && (
+                  {d.completed_at && <p className="mt-2 text-[11px] text-garden-sage">Finalizada: {new Date(d.completed_at).toLocaleString("es-MX")}</p>}
+                  {d.rejection_reason && <p className="mt-2 text-[11px] text-rose-300">Motivo: {d.rejection_reason}</p>}
+                  {d.donation_status === "en_transito" && (
                     <StockScanner
-                      donationId={d.id}
-                      currentStatus={d.status}
+                      donationId={d.donation_id}
+                      actions={["entrega", "rechazo"]}
                       onStatusChanged={loadData}
+                      onFeedback={(text, error) => setFeedbackMsg(text ? { id: "global", text, error } : null)}
                     />
                   )}
                 </div>

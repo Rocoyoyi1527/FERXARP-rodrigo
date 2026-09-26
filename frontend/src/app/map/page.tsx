@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, MapPoint } from "@/lib/api";
+import { createMapPopupContent } from "@/lib/mapPopup";
+import type { Layer, Map as LeafletMap, Marker } from "leaflet";
 
 export default function MapPage() {
   const router = useRouter();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -80,8 +82,9 @@ export default function MapPage() {
         }
         mapInstanceRef.current = null;
       }
-      if ((mapContainerRef.current as any)._leaflet_id) {
-        delete (mapContainerRef.current as any)._leaflet_id;
+      const mapContainer = mapContainerRef.current as HTMLDivElement & { _leaflet_id?: number };
+      if (mapContainer._leaflet_id) {
+        delete mapContainer._leaflet_id;
       }
 
       const map = L.map(mapContainerRef.current, {
@@ -100,7 +103,7 @@ export default function MapPage() {
       }).addTo(map);
 
       const acopioPoint = points.find((p) => p.point_type === "acopio");
-      const markersGroup: any[] = [];
+      const markersGroup: Marker[] = [];
 
       points.forEach((p) => {
         const isAcopio = p.point_type === "acopio";
@@ -128,20 +131,7 @@ export default function MapPage() {
         const marker = L.marker([p.latitude, p.longitude], { icon: customIcon }).addTo(map);
         markersGroup.push(marker);
 
-        marker.bindPopup(
-          `
-          <div style="font-family: inherit; padding: 4px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-              <strong style="color: #ffffff; font-size: 13px;">${p.name}</strong>
-              <span style="font-size: 9px; font-family: monospace; text-transform: uppercase; padding: 2px 6px; border-radius: 9999px; background: #060907; border: 1px solid rgba(36, 62, 49, 0.8); color: ${isAcopio ? "#34d399" : "#6ee7b7"};">
-                ${isAcopio ? "Almacén Central" : "Organización"}
-              </span>
-            </div>
-            <p style="margin: 0; color: #8fa896; font-size: 11px; line-height: 1.4;">${p.details}</p>
-          </div>
-          `,
-          { className: "custom-popup" }
-        );
+        marker.bindPopup(createMapPopupContent(p), { className: "custom-popup" });
 
         if (!isAcopio && acopioPoint) {
           L.polyline(
@@ -176,10 +166,11 @@ export default function MapPage() {
       isMounted = false;
       if (mapInstanceRef.current) {
         try {
-          mapInstanceRef.current.eachLayer((layer: any) => {
-            mapInstanceRef.current.removeLayer(layer);
+          const map = mapInstanceRef.current;
+          map.eachLayer((layer: Layer) => {
+            map.removeLayer(layer);
           });
-          mapInstanceRef.current.remove();
+          map.remove();
         } catch {
           // Captura silenciosa de desmonte
         }

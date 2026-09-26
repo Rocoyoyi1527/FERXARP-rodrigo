@@ -14,11 +14,19 @@ pub struct GroqClient {
     api_key: Option<String>,
 }
 
+impl Default for GroqClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GroqClient {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            api_key: env::var("GROQ_API_KEY").ok(),
+            api_key: env::var("GROQ_API_KEY")
+                .ok()
+                .filter(|key| !key.trim().is_empty()),
         }
     }
 
@@ -49,7 +57,8 @@ impl GroqClient {
             "temperature": 0.6
         });
 
-        let res = self.client
+        let res = self
+            .client
             .post("https://api.groq.com/openai/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")

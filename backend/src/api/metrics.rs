@@ -1,8 +1,8 @@
-use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::{api::auth::Claims, AppState};
+use crate::{AppState, api::auth::Claims};
 
 #[derive(Serialize)]
 pub struct ImpactMetrics {
@@ -39,15 +39,23 @@ async fn get_impact_summary(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error BD: {}", e),
+        )
+    })?;
 
     // 2. Conteo de ONGs verificadas activas
-    let ngos = sqlx::query!(
-        r#"SELECT COUNT(*) as verified FROM ngos WHERE is_verified = true"#
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?;
+    let ngos = sqlx::query!(r#"SELECT COUNT(*) as verified FROM ngos WHERE is_verified = true"#)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error BD: {}", e),
+            )
+        })?;
 
     let delivered_volume = stats.delivered_qty.unwrap_or(0);
     // Factor de mitigación ambiental: ~2.5 kg de CO2eq evitados por cada kg de residuo recuperado

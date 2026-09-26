@@ -33,7 +33,16 @@ export function AdminAudit() {
   };
 
   useEffect(() => {
-    loadNgos();
+    let active = true;
+    const token = localStorage.getItem("fexarp_token");
+    fetch("http://localhost:8000/api/auth/ngos", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((response) => response.ok ? response.json() as Promise<NgoAuditItem[]> : [])
+      .then((data) => { if (active) setNgos(data); })
+      .catch((error: unknown) => console.error("Error al cargar organizaciones:", error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   const toggleVerify = async (id: string) => {

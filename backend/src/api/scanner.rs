@@ -1,17 +1,20 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    api::auth::Claims,
-    models::user::Role,
     AppState,
+    api::{auth::Claims, middleware::internal_error},
+    models::{
+        donation_state::{DonationState, PhysicalAction},
+        user::Role,
+    },
 };
 
 #[derive(Deserialize)]
@@ -22,31 +25,33 @@ pub struct ScanRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScanAction {
-    Entrada,  // Ingreso al centro de acopio
-    Salida,   // En tránsito hacia la ONG
-    Entrega,  // Recepción final exitosa
-    Rechazo,  // Merma o rechazo por condiciones físicas
+    Entrada, // Ingreso al centro de acopio
+    Salida,  // En tránsito hacia la ONG
+    Entrega, // Recepción final exitosa
+    Rechazo, // Merma o rechazo por condiciones físicas
 }
 
 impl ScanAction {
-    pub fn to_status(&self) -> &'static str {
-        match self {
-            ScanAction::Entrada => "en_acopio",
-            ScanAction::Salida => "en_transito",
-            ScanAction::Entrega => "entregado",
-            ScanAction::Rechazo => "rechazado",
-        }
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             ScanAction::Entrada => "entrada",
             ScanAction::Salida => "salida",
             ScanAction::Entrega => "entrega",
             ScanAction::Rechazo => "rechazo",
+        }
+    }
+}
+
+impl From<ScanAction> for PhysicalAction {
+    fn from(action: ScanAction) -> Self {
+        match action {
+            ScanAction::Entrada => Self::Entrada,
+            ScanAction::Salida => Self::Salida,
+            ScanAction::Entrega => Self::Entrega,
+            ScanAction::Rechazo => Self::Rechazo,
         }
     }
 }
@@ -72,43 +77,124 @@ async fn process_scan(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ScanRequest>,
 ) -> Result<Json<ScanResponse>, (StatusCode, String)> {
-    if !matches!(claims.role, Role::Ong | Role::Admin) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Acceso denegado: permisos insuficientes para registrar transiciones físicas.".to_string(),
-        ));
+    // Entrada/Salida: Empresa propietaria o Admin. Entrega/Rechazo: ONG asignada o Admin.
+    let allowed_role = matches!(
+        (&payload.action, &claims.role),
+        (_, Role::Admin)
+            | (ScanAction::Entrada | ScanAction::Salida, Role::Empresa)
+            | (ScanAction::Entrega | ScanAction::Rechazo, Role::Ong)
+    );
+    if !allowed_role {
+        return Err((StatusCode::FORBIDDEN, "Acceso denegado".to_string()));
     }
 
-    let new_status = payload.action.to_status();
+    let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
 
     // 1. Obtener estado previo
     let current = sqlx::query!(
-        r#"SELECT status FROM donations WHERE id = $1"#,
+        r#"SELECT status, user_id, assigned_ngo_id FROM donations WHERE id = $1 FOR UPDATE"#,
         payload.donation_id
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *tx)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?
-    .ok_or((StatusCode::NOT_FOUND, "Lote de donación no encontrado".to_string()))?;
+    .map_err(|_| internal_error())?
+    .ok_or((
+        StatusCode::NOT_FOUND,
+        "Lote de donación no encontrado".to_string(),
+    ))?;
 
-    // 2. Actualizar donación y registrar fecha de entrega o motivo de rechazo
-    sqlx::query!(
+    match claims.role {
+        Role::Empresa if current.user_id != claims.sub => {
+            return Err((StatusCode::NOT_FOUND, "Lote no disponible".to_string()));
+        }
+        Role::Ong => {
+            let ngo_id = current
+                .assigned_ngo_id
+                .ok_or((StatusCode::NOT_FOUND, "Lote no disponible".to_string()))?;
+            let assigned = sqlx::query!(
+                "SELECT id FROM ngos WHERE id = $1 AND user_id = $2",
+                ngo_id,
+                claims.sub
+            )
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| internal_error())?;
+            if assigned.is_none() {
+                return Err((StatusCode::NOT_FOUND, "Lote no disponible".to_string()));
+            }
+        }
+        _ => {}
+    }
+
+    let previous = DonationState::from_db(&current.status).ok_or_else(internal_error)?;
+    let next = previous
+        .after_physical_action(payload.action.into())
+        .ok_or((StatusCode::CONFLICT, "Transición no permitida".to_string()))?;
+
+    let reason = if matches!(payload.action, ScanAction::Rechazo) {
+        let value = payload
+            .rejection_reason
+            .as_deref()
+            .unwrap_or_default()
+            .trim();
+        if value.is_empty() || value.chars().count() > 500 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Motivo de rechazo inválido".to_string(),
+            ));
+        }
+        Some(value.to_string())
+    } else {
+        None
+    };
+
+    if matches!(payload.action, ScanAction::Salida) {
+        let ngo_id = current
+            .assigned_ngo_id
+            .ok_or((StatusCode::CONFLICT, "Salida sin ONG aprobada".to_string()))?;
+        let approved = sqlx::query!(
+            "SELECT id FROM donation_requests WHERE donation_id = $1 AND ngo_id = $2 AND status = 'aprobada'",
+            payload.donation_id,
+            ngo_id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| internal_error())?;
+        if approved.is_none() {
+            return Err((
+                StatusCode::CONFLICT,
+                "Salida sin solicitud aprobada".to_string(),
+            ));
+        }
+    }
+
+    if matches!(payload.action, ScanAction::Entrega | ScanAction::Rechazo)
+        && current.assigned_ngo_id.is_none()
+    {
+        return Err((StatusCode::CONFLICT, "Entrega sin ONG asignada".to_string()));
+    }
+
+    let new_status = next.as_str();
+    let updated = sqlx::query!(
         r#"
         UPDATE donations 
         SET status = $1,
-            rejection_reason = CASE WHEN $1 = 'rechazado' THEN $3 ELSE rejection_reason END,
-            completed_at = CASE WHEN $1 = 'entregado' THEN now() ELSE completed_at END
-        WHERE id = $2
+            rejection_reason = $4,
+            completed_at = CASE WHEN $1 IN ('entregado', 'rechazado') THEN now() ELSE NULL END
+        WHERE id = $2 AND status = $3
         "#,
         new_status,
         payload.donation_id,
-        payload.rejection_reason
+        previous.as_str(),
+        reason.as_deref()
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al actualizar: {}", e)))?;
+    .map_err(|_| internal_error())?;
+    if updated.rows_affected() != 1 {
+        return Err((StatusCode::CONFLICT, "Transición no permitida".to_string()));
+    }
 
-    // 3. Registrar auditoría inmutable en delivery_logs (Riesgo R5)
     sqlx::query!(
         r#"
         INSERT INTO delivery_logs (donation_id, action, previous_status, new_status, notes)
@@ -116,17 +202,23 @@ async fn process_scan(
         "#,
         payload.donation_id,
         payload.action.as_str(),
-        current.status,
+        previous.as_str(),
         new_status,
-        payload.notes.or(payload.rejection_reason)
+        if matches!(payload.action, ScanAction::Rechazo) {
+            reason
+        } else {
+            payload.notes
+        }
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al auditar log: {}", e)))?;
+    .map_err(|_| internal_error())?;
+
+    tx.commit().await.map_err(|_| internal_error())?;
 
     Ok(Json(ScanResponse {
         donation_id: payload.donation_id,
-        previous_status: current.status,
+        previous_status: Some(current.status),
         new_status: new_status.to_string(),
         message: format!("Lote actualizado a: {}", new_status),
     }))
@@ -144,7 +236,12 @@ async fn get_tracking_status(
     )
     .fetch_optional(&state.db)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error BD: {}", e)))?
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error BD: {}", e),
+        )
+    })?
     .ok_or((StatusCode::NOT_FOUND, "Lote no encontrado".to_string()))?;
 
     Ok(Json(serde_json::json!({

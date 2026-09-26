@@ -1,12 +1,26 @@
-use axum::{extract::State, http::StatusCode, routing::{get, post}, Json, Router};
-use bcrypt::{hash, DEFAULT_COST};
-use serde::Serialize;
+use axum::{
+    Json, Router,
+    extract::{Query, State},
+    http::StatusCode,
+    routing::{get, post},
+};
+use bcrypt::{DEFAULT_COST, hash};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    ai::{chroma_db::ChromaClient, groq::GroqClient},
     AppState,
+    ai::{
+        chroma_db::ChromaClient,
+        groq::GroqClient,
+        index::{NgoIndexRecord, upsert_ngo},
+    },
+    api::{
+        auth::Claims,
+        middleware::{internal_error, require_role},
+    },
+    models::user::Role,
 };
 
 #[derive(Serialize)]
@@ -27,12 +41,18 @@ pub struct SeedResponse {
     pub ai_evaluations: Vec<AiMatchEvaluation>,
 }
 
+#[derive(Default, Deserialize)]
+struct SeedOptions {
+    include_ai: Option<bool>,
+}
+
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/veracruz", post(seed_veracruz_data))
         .route("/test-groq", get(test_groq_connection))
 }
 
+#[allow(dead_code)]
 struct CompanySeed {
     email: &'static str,
     name: &'static str,
@@ -51,10 +71,30 @@ struct NgoSeed {
 
 // POST /api/seed/veracruz - Ingesta idempotente con evaluación DeepSeek-R1
 async fn seed_veracruz_data(
+    claims: Claims,
+    Query(options): Query<SeedOptions>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SeedResponse>, (StatusCode, String)> {
-    let default_password = hash("Fexarp2026!", DEFAULT_COST)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    require_role(&claims, Role::Admin)?;
+    let seed_password = state.seed_password.as_deref().ok_or_else(internal_error)?;
+    let default_password = hash(seed_password, DEFAULT_COST).map_err(|_| internal_error())?;
+    let chroma = state
+        .chroma_url
+        .as_deref()
+        .ok_or(())
+        .and_then(|url| ChromaClient::new(url).map_err(|_| ()))
+        .map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "ChromaDB no está configurada".to_string(),
+            )
+        })?;
+    chroma.health().await.map_err(|_| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ChromaDB no está disponible".to_string(),
+        )
+    })?;
 
     let companies = vec![
         CompanySeed {
@@ -63,9 +103,21 @@ async fn seed_veracruz_data(
             lat: 19.1417,
             lon: -96.1042,
             donations: vec![
-                ("80 Cajas de Leche Entera", "Lácteos pasteurizados sellados con 20 días de vigencia para consumo", 80),
-                ("120 Paquetes de Abarrotes y Harinas", "Bolsas de harina de trigo, arroz y frijol negro empaquetados", 120),
-                ("50 Cajas de Manzanas y Verduras", "Fruta de temporada fresca en cajas de madera aptas para consumo inmediato", 50),
+                (
+                    "80 Cajas de Leche Entera",
+                    "Lácteos pasteurizados sellados con 20 días de vigencia para consumo",
+                    80,
+                ),
+                (
+                    "120 Paquetes de Abarrotes y Harinas",
+                    "Bolsas de harina de trigo, arroz y frijol negro empaquetados",
+                    120,
+                ),
+                (
+                    "50 Cajas de Manzanas y Verduras",
+                    "Fruta de temporada fresca en cajas de madera aptas para consumo inmediato",
+                    50,
+                ),
             ],
         },
         CompanySeed {
@@ -74,8 +126,16 @@ async fn seed_veracruz_data(
             lat: 19.1764,
             lon: -96.2238,
             donations: vec![
-                ("15 Laptops y Servidores Dell", "Equipo de cómputo funcional retirado por ciclo de renovación interna", 15),
-                ("40 Escritorios y Sillas de Oficina", "Mobiliario ergonómico en óptimo estado para aulas o administración", 40),
+                (
+                    "15 Laptops y Servidores Dell",
+                    "Equipo de cómputo funcional retirado por ciclo de renovación interna",
+                    15,
+                ),
+                (
+                    "40 Escritorios y Sillas de Oficina",
+                    "Mobiliario ergonómico en óptimo estado para aulas o administración",
+                    40,
+                ),
             ],
         },
         CompanySeed {
@@ -83,9 +143,11 @@ async fn seed_veracruz_data(
             name: "Cafiver Veracruz",
             lat: 19.1650,
             lon: -96.1400,
-            donations: vec![
-                ("200 Frascos de Café Soluble", "Café procesado en frascos herméticos de 200g listos para despensas", 200),
-            ],
+            donations: vec![(
+                "200 Frascos de Café Soluble",
+                "Café procesado en frascos herméticos de 200g listos para despensas",
+                200,
+            )],
         },
     ];
 
@@ -144,7 +206,7 @@ async fn seed_veracruz_data(
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error empresa: {}", e)))?;
+        .map_err(|_| internal_error())?;
 
         for (title, desc, qty) in &comp.donations {
             let existing_don = sqlx::query!(
@@ -182,7 +244,6 @@ async fn seed_veracruz_data(
     }
 
     // 2. Sembrado de ONGs e Indexación Vectorial
-    let chroma = ChromaClient::new(None);
     let mut ngos_list = Vec::new();
 
     for ngo in &ngos {
@@ -198,38 +259,36 @@ async fn seed_veracruz_data(
         )
         .fetch_one(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error usuario ONG: {}", e)))?;
+        .map_err(|_| internal_error())?;
 
-        let ngo_row = sqlx::query!(
-            "SELECT id FROM ngos WHERE name = $1 OR user_id = $2",
-            ngo.name,
-            user_row.id
-        )
-        .fetch_optional(&state.db)
-        .await
-        .unwrap_or(None);
+        let ngo_row = sqlx::query!("SELECT id FROM ngos WHERE user_id = $1", user_row.id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
 
         let final_ngo_id = if let Some(rec) = ngo_row {
             let _ = sqlx::query!(
                 r#"
                 UPDATE ngos 
-                SET needs_description = $1, latitude = $2, longitude = $3, is_verified = true
-                WHERE id = $4
+                SET name = $1, needs_description = $2, latitude = $3, longitude = $4
+                WHERE id = $5
                 "#,
+                ngo.name,
                 ngo.needs,
                 ngo.lat,
                 ngo.lon,
                 rec.id
             )
             .execute(&state.db)
-            .await;
+            .await
+            .map_err(|_| internal_error())?;
             rec.id
         } else {
             let new_id = Uuid::new_v4();
             let _ = sqlx::query!(
                 r#"
                 INSERT INTO ngos (id, user_id, name, needs_description, latitude, longitude, is_verified)
-                VALUES ($1, $2, $3, $4, $5, $6, true)
+                VALUES ($1, $2, $3, $4, $5, $6, false)
                 "#,
                 new_id,
                 user_row.id,
@@ -239,36 +298,64 @@ async fn seed_veracruz_data(
                 ngo.lon
             )
             .execute(&state.db)
-            .await;
+            .await
+            .map_err(|_| internal_error())?;
             new_id
         };
 
-        let _ = chroma.add_or_update_ngo(final_ngo_id, ngo.needs).await;
-        ngos_list.push((final_ngo_id, ngo.name.to_string(), ngo.needs.to_string(), ngo.lat, ngo.lon));
+        let indexed_ngo = sqlx::query_as::<_, NgoIndexRecord>(
+            "SELECT id, name, needs_description FROM ngos WHERE id = $1",
+        )
+        .bind(final_ngo_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| internal_error())?;
+
+        upsert_ngo(&chroma, &indexed_ngo).await.map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "No se pudo indexar la ONG en ChromaDB; ejecute reindex_chroma".to_string(),
+            )
+        })?;
+        ngos_list.push((
+            final_ngo_id,
+            ngo.name.to_string(),
+            ngo.needs.to_string(),
+            ngo.lat,
+            ngo.lon,
+        ));
     }
 
     // 3. Puntuación automática con DeepSeek-R1 (Groq)
     let groq = GroqClient::new();
     let mut ai_evaluations = Vec::new();
 
-    for (_don_id, title, desc) in all_created_donations.iter().take(4) {
+    for (_don_id, title, desc) in
+        all_created_donations
+            .iter()
+            .take(if options.include_ai.unwrap_or(true) {
+                4
+            } else {
+                0
+            })
+    {
         let mut best_score = 0.0;
         let mut best_eval: Option<AiMatchEvaluation> = None;
 
         for (_ngo_id, name, needs, lat, lon) in &ngos_list {
             let dist = ((19.1738 - lat).powi(2) + (-96.1342 - lon).powi(2)).sqrt() * 111.0;
 
-            if let Some(eval) = groq.evaluate_fit(title, desc, name, needs, dist).await {
-                if eval.compatibility_score > best_score {
-                    best_score = eval.compatibility_score;
-                    best_eval = Some(AiMatchEvaluation {
-                        donation_title: title.clone(),
-                        recommended_ngo: name.clone(),
-                        score: eval.compatibility_score,
-                        priority: eval.priority_level,
-                        reasoning: eval.reasoning,
-                    });
-                }
+            if let Some(eval) = groq.evaluate_fit(title, desc, name, needs, dist).await
+                && eval.compatibility_score > best_score
+            {
+                best_score = eval.compatibility_score;
+                best_eval = Some(AiMatchEvaluation {
+                    donation_title: title.clone(),
+                    recommended_ngo: name.clone(),
+                    score: eval.compatibility_score,
+                    priority: eval.priority_level,
+                    reasoning: eval.reasoning,
+                });
             }
         }
 
@@ -278,7 +365,7 @@ async fn seed_veracruz_data(
     }
 
     Ok(Json(SeedResponse {
-        message: "Ecosistema poblado y puntuado con Groq AI.".to_string(),
+        message: "Ecosistema poblado e indexado en ChromaDB; Groq es opcional.".to_string(),
         companies_seeded: companies.len(),
         ngos_seeded: ngos.len(),
         donations_seeded: seeded_donations_count,
@@ -287,17 +374,22 @@ async fn seed_veracruz_data(
 }
 
 // GET /api/seed/test-groq - Diagnóstico directo de DeepSeek-R1
-async fn test_groq_connection() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+async fn test_groq_connection(
+    claims: Claims,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    require_role(&claims, Role::Admin)?;
     let groq = GroqClient::new();
     let start = std::time::Instant::now();
 
-    let eval = groq.evaluate_fit(
-        "80 Cajas de Leche Entera",
-        "Lácteos pasteurizados con 20 días de vigencia",
-        "Banco de Alimentos de Veracruz (AMBA)",
-        "Demanda crítica de leche, lácteos y fórmulas infantiles para comedores comunitarios",
-        2.4,
-    ).await;
+    let eval = groq
+        .evaluate_fit(
+            "80 Cajas de Leche Entera",
+            "Lácteos pasteurizados con 20 días de vigencia",
+            "Banco de Alimentos de Veracruz (AMBA)",
+            "Demanda crítica de leche, lácteos y fórmulas infantiles para comedores comunitarios",
+            2.4,
+        )
+        .await;
 
     let elapsed_ms = start.elapsed().as_millis();
 
@@ -308,9 +400,6 @@ async fn test_groq_connection() -> Result<Json<serde_json::Value>, (StatusCode, 
             "latency_ms": elapsed_ms,
             "evaluation": result
         }))),
-        None => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Fallo al conectar con Groq. Verifica que GROQ_API_KEY esté presente en backend/.env".to_string(),
-        )),
+        None => Err(internal_error()),
     }
 }

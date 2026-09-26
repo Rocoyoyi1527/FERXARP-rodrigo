@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO ngos (user_id, name, needs_description, latitude, longitude, is_verified)\n            VALUES ($1, $2, $3, $4, $5, false)\n            ON CONFLICT DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b47e1167d7b5deac1a7a441a9d66afec1a5f94d8860f7dff3a6f234f316662a"
+}

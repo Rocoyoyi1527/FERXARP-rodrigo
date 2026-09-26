@@ -9,29 +9,50 @@ interface GardenGraphProps {
   isLoading?: boolean;
 }
 
+function isMatch(item: ScoredMatch | MapPoint): item is ScoredMatch {
+  return "ngo_id" in item;
+}
+
+function uniqueTargets(items: (ScoredMatch | MapPoint)[]) {
+  const seenNames = new Set<string>();
+  return items.filter((item) => {
+    const name = (isMatch(item) ? item.ngo_name : item.name).trim();
+    if (!name || seenNames.has(name)) return false;
+    seenNames.add(name);
+    return true;
+  });
+}
+
+function targetDetail(item: ScoredMatch | MapPoint, isDonationMode: boolean) {
+  if (!isDonationMode || !isMatch(item)) return "Organización Verificada";
+  const distance = item.distance_km === null
+    ? "distancia no disponible"
+    : `${item.distance_km.toFixed(1)} km`;
+  return `Prioridad: ${item.final_score.toFixed(1)}/100 | ${distance}`;
+}
+
+function centerTitle(donation: DonationItem | null) {
+  if (!donation) return "Centro de Acopio";
+  return donation.title.length > 20 ? `${donation.title.slice(0, 20)}...` : donation.title;
+}
+
 export function GardenGraph({ donation, matches, isLoading = false }: GardenGraphProps) {
   const [allPoints, setAllPoints] = useState<MapPoint[]>([]);
-  const [activeMatch, setActiveMatch] = useState<ScoredMatch | null>(null);
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!donation) {
       api.getMapPoints().then(setAllPoints).catch(console.error);
-    } else if (matches.length > 0) {
-      setActiveMatch(matches[0]);
     }
-  }, [donation, matches]);
+  }, [donation]);
+
+  const activeMatch = donation ? matches.find((m) => m.ngo_id === selectedMatchId) ?? matches[0] ?? null : null;
 
   const isDonationMode = Boolean(donation);
   const rawList = isDonationMode ? matches : allPoints.filter((p) => p.point_type === "ong");
 
   // Deduplicación estricta de nombres para que nunca se encimen
-  const seenNames = new Set<string>();
-  const targetList = rawList.filter((item: any) => {
-    const name = (item.ngo_name || item.name || "").trim();
-    if (!name || seenNames.has(name)) return false;
-    seenNames.add(name);
-    return true;
-  });
+  const targetList = uniqueTargets(rawList);
 
   const totalTargets = targetList.length;
 
@@ -110,11 +131,11 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
             </defs>
 
             {/* RAMAS SVG */}
-            {targetList.map((item: any, i) => {
+            {targetList.map((item, i) => {
               const destY = getTargetY(i);
-              const score = isDonationMode ? item.final_score : 70;
+              const score = isMatch(item) ? item.final_score : 70;
               const branchThickness = Math.max(1.8, (score / 100) * 5.5);
-              const isSelected = activeMatch?.ngo_id === item.ngo_id;
+              const isSelected = isMatch(item) && activeMatch?.ngo_id === item.ngo_id;
 
               const cp1X = originX + (targetX - originX) * 0.45;
               const cp1Y = originY;
@@ -124,7 +145,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
               const pathData = `M ${originX} ${originY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${targetX} ${destY}`;
 
               return (
-                <g key={item.ngo_id || item.id} className="cursor-pointer" onClick={() => isDonationMode && setActiveMatch(item)}>
+                <g key={isMatch(item) ? item.ngo_id : item.id} className="cursor-pointer" onClick={() => { if (isMatch(item)) setSelectedMatchId(item.ngo_id); }}>
                   <path d={pathData} fill="none" stroke="transparent" strokeWidth={24} />
                   <path
                     d={pathData}
@@ -155,7 +176,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
               <circle r={14} fill="#10b981" opacity={0.2} className="animate-ping" />
               <circle r={7} fill="#34d399" />
               <text x={-40} y={-34} fill="#ffffff" fontSize="11" fontWeight="600">
-                {isDonationMode ? (donation!.title.length > 20 ? `${donation!.title.slice(0, 20)}...` : donation!.title) : "Centro de Acopio"}
+                {centerTitle(donation)}
               </text>
               <text x={-40} y={-20} fill="#8fa896" fontSize="9" className="font-mono">
                 {isDonationMode ? "Lote a Distribuir" : "Hub Logístico"}
@@ -163,18 +184,18 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
             </g>
 
             {/* NODOS DESTINO */}
-            {targetList.map((item: any, i) => {
+            {targetList.map((item, i) => {
               const destY = getTargetY(i);
-              const name = item.ngo_name || item.name;
-              const isSelected = activeMatch?.ngo_id === item.ngo_id;
-              const isHighPrio = isDonationMode ? item.final_score >= 80 : true;
+              const name = isMatch(item) ? item.ngo_name : item.name;
+              const isSelected = isMatch(item) && activeMatch?.ngo_id === item.ngo_id;
+              const isHighPrio = isMatch(item) ? item.final_score >= 80 : true;
 
               return (
                 <g
-                  key={item.ngo_id || item.id}
+                  key={isMatch(item) ? item.ngo_id : item.id}
                   transform={`translate(${targetX}, ${destY})`}
                   className="cursor-pointer group"
-                  onClick={() => isDonationMode && setActiveMatch(item)}
+                  onClick={() => { if (isMatch(item)) setSelectedMatchId(item.ngo_id); }}
                 >
                   <circle
                     r={isSelected ? 18 : 13}
@@ -196,9 +217,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
                     {name}
                   </text>
                   <text x={24} y={13} fill="#8fa896" fontSize="9.5" className="font-mono">
-                    {isDonationMode
-                      ? `Compatibilidad: ${item.final_score.toFixed(1)}% | ${item.distance_km.toFixed(1)} km`
-                      : "Organización Verificada"}
+                    {targetDetail(item, isDonationMode)}
                   </text>
                 </g>
               );
@@ -212,7 +231,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
         <div className="mt-4 p-4 rounded-xl bg-garden-dark/95 border border-garden-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-garden-surface border border-garden-emerald/40 flex items-center justify-center font-mono font-bold text-sm text-garden-sprout shrink-0">
-              {activeMatch.final_score.toFixed(0)}%
+              {activeMatch.final_score.toFixed(0)}
             </div>
             <div>
               <p className="text-xs font-semibold text-white flex items-center gap-2">
@@ -224,7 +243,7 @@ export function GardenGraph({ donation, matches, isLoading = false }: GardenGrap
                 )}
               </p>
               <p className="text-[11px] text-garden-sage mt-0.5">
-                Similitud semántica: {(activeMatch.semantic_similarity * 100).toFixed(1)}% | Distancia: {activeMatch.distance_km.toFixed(1)} km
+                Puntaje de contenido: {(activeMatch.semantic_similarity * 100).toFixed(1)}/100 | Distancia: {activeMatch.distance_km === null ? "no disponible" : `${activeMatch.distance_km.toFixed(1)} km`}
               </p>
               {activeMatch.ai_reasoning && (
                 <p className="text-[11px] text-emerald-300/90 italic mt-1 bg-garden-surface/60 px-2.5 py-1 rounded border border-garden-border/40">

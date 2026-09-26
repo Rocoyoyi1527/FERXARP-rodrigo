@@ -1,0 +1,170 @@
+name: FERXARP CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-quality:
+    name: Backend tests, coverage and release build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgres://ferxarp:ci-only-password@127.0.0.1:5433/ferxarp_ci
+      CHROMA_URL: http://127.0.0.1:8001
+      JWT_SECRET: ci-only-jwt-secret-for-ephemeral-tests
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ferxarp_ci
+          POSTGRES_USER: ferxarp
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U ferxarp -d ferxarp_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+      chromadb:
+        image: chromadb/chroma:1.5.0
+        env:
+          ANONYMIZED_TELEMETRY: "FALSE"
+        ports:
+          - 8001:8000
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master, pinned for explicit toolchain input
+        with:
+          toolchain: 1.98.1
+          components: rustfmt, clippy, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+      - name: Native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+      - name: Install pinned coverage and SQLx tools
+        run: |
+          cargo install cargo-llvm-cov --version 0.6.23 --locked
+          cargo install sqlx-cli --version 0.9.0 --locked --no-default-features --features postgres,rustls
+      - name: Wait for ChromaDB
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:8001/api/v2/heartbeat; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Apply local CI migrations
+        run: cargo sqlx migrate run
+      - name: Format
+        run: cargo fmt --check
+      - name: Compile check
+        run: cargo check --locked
+      - name: SQLx metadata check
+        run: cargo sqlx prepare --check -- --locked
+      - name: Rust tests
+        run: cargo test --locked
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Rust coverage, module threshold 80% lines
+        run: ./scripts/coverage.sh
+      - name: Backend release build
+        run: cargo build --release --locked --bins
+      - name: Upload Rust coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rust-coverage
+          path: |
+            backend/coverage/lcov.info
+            backend/coverage/full-summary.txt
+            backend/coverage/module-summary.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend-quality:
+    name: Frontend tests, coverage and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.26.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Type check
+        run: pnpm exec tsc --noEmit
+      - name: Jest tests (script already uses --runInBand)
+        run: pnpm test
+      - name: Jest coverage and 80% thresholds
+        run: pnpm test:coverage
+      - name: Frontend build
+        run: pnpm build
+      - name: Upload Jest coverage summary
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: jest-coverage-summary
+          path: frontend/coverage/coverage-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker-build:
+    name: Build backend and frontend Docker images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    needs: [backend-quality, frontend-quality]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build backend image
+        run: docker build --tag ferxarp-backend:ci ./backend
+      - name: Build frontend image
+        run: docker build --tag ferxarp-frontend:ci ./frontend
+
+  deploy-test-environment:
+    name: Deploy ephemeral test environment and smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    needs: [backend-quality, frontend-quality, docker-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Deploy, migrate, provision, smoke and clean up
+        run: ./scripts/deploy-test.sh
+      - name: Upload deployment logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: deploy-test-logs
+          path: ci-artifacts/deploy.log
+          if-no-files-found: ignore
+          retention-days: 7

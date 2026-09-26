@@ -4,7 +4,7 @@ interface MatchItem {
   ngo_id: string;
   ngo_name: string;
   final_score: number;
-  distance_km: number;
+  distance_km: number | null;
   semantic_similarity: number;
 }
 
@@ -21,7 +21,7 @@ export function MatchingResults({ matches }: { matches: MatchItem[] }) {
           >
             <div>
               <span className="font-semibold text-white">{m.ngo_name}</span>
-              <span className="text-neutral-500 ml-2">({m.distance_km} km de distancia)</span>
+              <span className="text-neutral-500 ml-2">({m.distance_km === null ? "distancia no disponible" : `${m.distance_km} km de distancia`})</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-neutral-400">Score:</span>
