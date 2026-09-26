@@ -2,11 +2,13 @@
 
 **Corte documental:** commit `9792bcd7c4842e812ea0313d2831a91924455942`, fechado el 26-09-2026 en Git. **Base de este informe:** historial y archivos versionados del repositorio. Este documento no asigna calificación ni estima horas de trabajo.
 
+**Actualización documental posterior:** se incorporaron los runs remotos de PR y `main` en [evidencia GitHub Actions](../evidencias/cicd/github-actions-remote.md). Las métricas y demás hallazgos conservan su corte original.
+
 ## 1. Resumen ejecutivo
 
 FERXARP dispone de backend Rust/Axum con PostgreSQL/SQLx, frontend Next.js, autenticación JWT, cuatro roles, control de propiedad, ciclo transaccional de donaciones, matching local/vectorial con ChromaDB y despliegue **de prueba** automatizado en GitHub Actions. ACT-01 dejó pruebas y cobertura; ACT-02 dejó el pipeline y una validación local del despliegue efímero; ACT-03 dejó análisis ZAP/SonarQube con resultados antes/después. Un XSS almacenado del popup del mapa fue demostrado en Chromium y corregido. Permanece un aviso Medium de CSP ausente; no se presenta como resuelto.
 
-El repositorio demuestra builds, pruebas, smoke tests y scans **locales**. La evidencia versionada de ACT-02 no contiene una ejecución del workflow en GitHub; tampoco permite descartar que se haya ejecutado fuera de este repositorio. No hay evidencia de despliegue a producción. Las cifras de cobertura de este informe conservan el alcance de cada herramienta: módulo escolar Rust, conjunto Jest instrumentado o proyectos completos analizados por SonarQube.
+El repositorio demuestra builds, pruebas, smoke tests y scans **locales**. Además, el [PR #1](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36277313303) validó remotamente tests y builds, y el [push a `main`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691) validó tests, builds y deploy-test con smoke y limpieza. No hay evidencia de despliegue a producción. Las cifras de cobertura de este informe conservan el alcance de cada herramienta: módulo escolar Rust, conjunto Jest instrumentado o proyectos completos analizados por SonarQube.
 
 Fuentes principales: [README del proyecto](../../README.md), [documentación de fases](../../documentacion.md), [ACT-01](../evidencias/testing/README.md), [ACT-02](../evidencias/cicd/README.md), [ACT-03 seguridad](../evidencias/security/README.md), [ACT-03 calidad](../evidencias/quality/README.md), [workflow](../../.github/workflows/ci-cd.yml), [migración inicial](../../backend/migrations/20260924000000_initial_schema.sql), [migración de donaciones](../../backend/migrations/20260925000000_donation_lifecycle.sql) y `git log` hasta `9792bcd`.
 
@@ -45,7 +47,7 @@ Fechas tomadas de los timestamps de autor mostrados por `git log --date=iso-stri
 | 2026-09-24 | Frontend | `b281dd5` | UI alineada al lifecycle | Envíos y acciones por etapa actualizados |
 | 2026-09-25 | Matching | `ea2673a` | Estabiliza Chroma y matching híbrido | API/colección consistentes, reindexación y tests de integración |
 | 2026-09-25 | ACT-01 | `b20fd21` | Jest, cobertura y evidencia | 73 tests Rust, 35 Jest, módulo Rust 85.91% líneas |
-| 2026-09-26 | ACT-02 | `0b8de8f` | Workflow y deploy-test | Builds/smoke locales PASS; sin run remoto en la evidencia versionada |
+| 2026-09-26 | ACT-02 | `0b8de8f` | Workflow y deploy-test | Builds/smoke locales PASS; runs remotos posteriores PR/main documentados en CI/CD |
 | 2026-09-26 | ACT-03 | `9792bcd` | ZAP, correcciones, SonarQube | XSS corregido, gate final PASS, CSP pendiente |
 
 ## 5. Comparación planificado vs ejecutado
@@ -62,10 +64,10 @@ El repositorio no conserva una línea base temporal suficiente para cuantificar 
 | Seguridad y orquestación | Semana 4: RBAC y Compose | Compose/RBAC inicial 23-09; hardening 24-09; ZAP y correcciones 26-09 | **Ampliado** con pruebas dinámicas y headers | `0d2b7a4`, `9792bcd` y reportes ZAP | XSS/CORS corregidos; CSP aún abierto |
 | Matching/IA | Scoring y vectorización; README menciona Groq | Chroma híbrido con fallback y Groq opcional | **Modificado/ampliado** para funcionar sin servicio externo | README y pruebas Chroma `ea2673a` | Matching local reproducible; Groq real fuera de la validación |
 | Pruebas y cobertura | ACT-01 pide pruebas y umbral de módulo | 73 Rust/35 Jest en ACT-01; 74/39 tras ACT-03 | **Cumplido y ampliado** con regresiones de seguridad | Evidencias ACT-01/03 | Umbral de módulo y Jest acreditados sin mezclar alcances |
-| CI/CD | ACT-02 pide tests, build y deploy de prueba | Workflow y despliegue efímero local con cinco smoke checks | **Cumplido localmente**; ejecución GitHub no acreditada | Evidencia ACT-02 conserva solo la ejecución local | Menor diferencia entre ambientes; acreditación remota pendiente |
+| CI/CD | ACT-02 pide tests, build y deploy de prueba | Workflow, despliegue efímero local y runs remotos PR/main con cinco smoke checks en `main` | **Cumplido local y remotamente** para el entorno de prueba | [Evidencia remota](../evidencias/cicd/github-actions-remote.md) y validación local ACT-02 | Tests/build en PR y `main`; deploy-test en `main` acreditado |
 | Seguridad/calidad | ACT-03 pide ZAP y Sonar | Scans antes/después, XSS corregido, métricas y gate PASS | **Cumplido con pendiente** CSP Medium | Evidencias ACT-03 | Riesgo residual explícito |
 | Métricas CEO | README presenta tablero y estimaciones | Endpoint/UI existentes con factores fijos | **Implementado; validación específica no acreditada** | `api/metrics.rs` y exclusión de ACT-01 | No confundir existencia con precisión demostrada |
-| Producción | El plan de cuatro semanas menciona Compose, no un deploy productivo fechado | Solo deploy-test local; sin producción demostrada | **Fuera del alcance verificado** | Workflow condicionado a `main` despliega entorno efímero | No se atribuye operación productiva |
+| Producción | El plan de cuatro semanas menciona Compose, no un deploy productivo fechado | Solo deploy-test local y remoto; sin producción demostrada | **Fuera del alcance verificado** | Workflow condicionado a `main` despliega entorno efímero | No se atribuye operación productiva |
 
 ## 6. Desviaciones e incidentes
 
@@ -92,10 +94,10 @@ Estas filas no implican duración, costo ni culpa atribuible a una persona. Cuan
 | Cobertura Rust módulo escolar | **85.91% líneas** | Archivos definidos por [ACT-01](../evidencias/testing/README.md); no es todo el backend |
 | Cobertura Rust completa ACT-02 | **74.48% líneas** | Reporte completo de esa ejecución local; valor histórico, no sustituye medición Sonar ACT-03 |
 | Cobertura Jest ACT-03 | **98.03% líneas; 90.27% ramas** | Conjunto instrumentado por Jest, no todo `frontend/src` |
-| Build Rust/Next/Docker | **PASS local** | Validaciones ACT-01 a ACT-03 y builds Docker de ambos servicios |
-| Deploy-test ACT-02 | **PASS local** | PostgreSQL, Chroma, backend y frontend saludables; cinco respuestas smoke HTTP 200; `down -v` |
+| Build Rust/Next/Docker | **PASS local y remoto** | Validaciones ACT-01 a ACT-03; jobs de PR y `main` en [GitHub Actions](../evidencias/cicd/github-actions-remote.md) |
+| Deploy-test ACT-02 | **PASS local y remoto** | PostgreSQL, Chroma, backend y frontend saludables; cinco respuestas smoke HTTP 200; `down -v` en `main` |
 
-El [workflow](../../.github/workflows/ci-cd.yml) define jobs de backend, frontend, build Docker y despliegue efímero en push a `main`. La ejecución local del script de despliegue consta en [validación ACT-02](../evidencias/cicd/validacion-local-2026-09-26.md); no se equipara con un run remoto de GitHub Actions.
+El [workflow](../../.github/workflows/ci-cd.yml) define jobs de backend, frontend, build Docker y despliegue efímero en push a `main`. La ejecución local del script consta en [validación ACT-02](../evidencias/cicd/validacion-local-2026-09-26.md); los runs remotos de PR y `main` constan por separado en [evidencia GitHub Actions](../evidencias/cicd/github-actions-remote.md).
 
 ## 8. Seguridad y calidad
 
@@ -123,7 +125,7 @@ La cobertura **nueva** final del gate fue 93.1% frontend y 100% backend. Los por
 5. **Medir cobertura por alcance:** ACT-01 documentó 85.91% del módulo escolar y un porcentaje menor del backend completo. ACT-03 mostró otra cifra para el proyecto completo Sonar; el número de tests por sí solo no expresa cobertura.
 6. **Probar la salida real del navegador:** ZAP y Sonar informaron cero XSS, mientras Chromium ejecutó el payload del popup. La regresión DOM confirmó la corrección.
 7. **Atender el Quality Gate sin alterar su umbral:** el FAIL intermedio de 64.3% de cobertura nueva se resolvió con pruebas, y la medición final fue 93.1%.
-8. **Hacer efímera la validación de despliegue:** ACT-02 migró, aprovisionó Admin, esperó readiness, ejecutó cinco smoke checks y borró volúmenes; esto hace repetible la prueba local y limita datos residuales.
+8. **Hacer efímera la validación de despliegue:** ACT-02 migró, aprovisionó Admin, esperó readiness, ejecutó cinco smoke checks y borró volúmenes; las ejecuciones local y remota de `main` acreditan la repetibilidad de la prueba y limitan datos residuales.
 9. **Distinguir código presente de comportamiento validado:** Groq y métricas CEO existen, pero las pruebas de ACT-01/03 no acreditan servicio Groq real ni la precisión de las estimaciones de impacto.
 
 ## 10. Riesgos y pendientes
@@ -133,11 +135,10 @@ La cobertura **nueva** final del gate fue 93.1% frontend y 100% backend. Los por
 | P1 | CSP frontend con nonces y política compatible con Next, API y mapa | ZAP-10038 sigue Medium en [ACT-03](../evidencias/security/README.md); comprobar renderizado y re-scan antes de cerrar |
 | P2 | Complejidad de `api/seed.rs:73` | Sonar conserva `rust:S3776`, complejidad 22 frente a 15, deuda estimada 6 min |
 | P2 | Active scan autenticado y E2E de navegador más amplio | ZAP fue anónimo; hubo HTTP dirigido y una prueba Chromium de XSS, sin suite E2E completa |
-| P2 | Acreditar el workflow en GitHub | [ACT-02](../evidencias/cicd/README.md) solo conserva la ejecución local; capturar un run remoto tras publicación normal |
 | P2 | Validación de integración Groq y de estimaciones CEO | Groq fue opcional/no invocado en pruebas; métricas CEO usan factores fijos y quedaron fuera del módulo de cobertura ACT-01 |
 
 El despliegue de producción no se realizó ni se afirma como pendiente con fecha: el workflow documentado despliega exclusivamente una instancia de prueba. No se infiere un P0 adicional a partir de ausencia de pruebas.
 
 ## 11. Conclusión
 
-El cierre documental acredita el alcance funcional, la calidad y la seguridad **en los ambientes y rutas efectivamente probados**. Git permite reconstruir la secuencia de implementación y las evidencias permiten separar resultados iniciales, correcciones y resultados finales. La comparación temporal queda limitada porque no existe un calendario original fechado; este informe conserva esa incertidumbre en lugar de inventar retrasos. La CSP, las comprobaciones autenticadas/E2E más amplias, el run remoto del workflow y la validación de componentes opcionales quedan identificados para trabajo posterior, sin presentarlos como completados.
+El cierre documental acredita el alcance funcional, la calidad y la seguridad **en los ambientes y rutas efectivamente probados**. Git permite reconstruir la secuencia de implementación y las evidencias permiten separar resultados iniciales, correcciones y resultados finales. La comparación temporal queda limitada porque no existe un calendario original fechado; este informe conserva esa incertidumbre en lugar de inventar retrasos. Los runs remotos acreditan el pipeline de prueba. La CSP, las comprobaciones autenticadas/E2E más amplias y la validación de componentes opcionales quedan identificadas para trabajo posterior, sin presentarlas como completadas.

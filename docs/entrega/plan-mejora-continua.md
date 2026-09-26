@@ -1,6 +1,6 @@
 # Plan de mejora continua FERXARP
 
-**Punto de partida:** [Informe de cierre](informe-cierre.md), commit `fe3d118` de 26-09-2026. Este documento propone trabajo futuro; **ninguna acción se declara implementada**. Los horizontes son relativos y las metas son propuestas de aceptación, no resultados actuales ni fechas históricas.
+**Punto de partida:** [Informe de cierre](informe-cierre.md), commit `fe3d118` de 26-09-2026. Los horizontes son relativos y las metas son propuestas de aceptación, no resultados actuales ni fechas históricas. **Actualización posterior:** CI-01 alcanzó su meta inicial de acreditación remota mediante los [runs de PR y `main`](../evidencias/cicd/github-actions-remote.md); las demás acciones conservan su carácter de propuesta o mantenimiento.
 
 ## 1. Objetivo
 
@@ -20,7 +20,7 @@ Fuentes: [cierre ACT-04](informe-cierre.md), [pruebas ACT-01](../evidencias/test
 | Cobertura Sonar total | Frontend **77.8%**, backend **77.9%** | Proyectos completos, no umbral escolar |
 | Cobertura módulo escolar Rust | **85.91% líneas** | Alcance fijado por ACT-01 |
 | Cobertura Jest final | **98.03% líneas**, **90.27% ramas** | Archivos instrumentados en ACT-03, no todo frontend |
-| Deploy-test | **5/5** smoke local y limpieza `down -v` | ACT-02; sin run GitHub versionado |
+| Deploy-test | **5/5** smoke local y remoto en `main`, con limpieza `down -v` | [ACT-02](../evidencias/cicd/README.md) y [runs remotos](../evidencias/cicd/github-actions-remote.md) |
 | E2E navegador completo | Sin suite de lifecycle documentada | Existe una prueba Chromium dirigida al XSS |
 | Métricas CEO | `quantity` sin unidad explícita; CO2e `×2.5`; beneficiarios `÷5` | Código versionado; no se acredita validez de factores |
 | Distancia/urgencia matching | Origen fijo `19.1738, -96.1342`; `urgency_level: 4` al formar candidatos | `donations.rs`; no se afirma distancia o urgencia real |
@@ -47,7 +47,7 @@ Las fichas de las secciones 5–10 contienen problema, acción, KPI, meta, evide
 | **Media** | SEC-03, QUAL-01, QUAL-03, CI-03, PROD-01, DATA-01, DATA-02, DATA-03, GEO-01, URG-01, AI-01, AI-02, OPS-01 | **13** |
 | **Baja** | AI-03, INNO-01, INNO-02, INNO-03 | **4** |
 
-**Alta** atiende exposición o evidencia de confiabilidad. **Media** corrige deuda y datos que condicionan decisiones. **Baja** reserva experimentos para después de medir y estabilizar sus insumos. Dentro de cada prioridad, las dependencias de las fichas determinan el orden real.
+**Alta** atiende exposición o evidencia de confiabilidad. **Media** corrige deuda y datos que condicionan decisiones. **Baja** reserva experimentos para después de medir y estabilizar sus insumos. Dentro de cada prioridad, las dependencias de las fichas determinan el orden real. Los totales conservan las 25 acciones del plan original; **CI-01 está completada** tras la actualización remota.
 
 ## 5. Seguridad
 
@@ -100,13 +100,13 @@ Las fichas de las secciones 5–10 contienen problema, acción, KPI, meta, evide
 
 ## 7. CI/CD y operación
 
-**CI-01 — CI/CD · Alta · Corto plazo.** Problema: ACT-02 acredita ejecución local, pero el repositorio no conserva un run remoto de GitHub Actions. Acción: ejecutar el workflow tras publicación normal y archivar enlaces/artefactos de PR y `main`.
-- **KPI y meta:** **1 PR** con test/build PASS y deploy omitido según diseño; **1 push a `main`** con los cuatro jobs PASS, incluidos deploy-test y limpieza. Baseline: **sin evidencia remota versionada**, no “cero runs existentes”.
-- **Evidencia:** URL/ID de runs, artefactos de cobertura y logs de smoke.
-- **Dependencias:** publicación autorizada por el equipo; no se propone hacerla como parte de ACT-05.
+**CI-01 — CI/CD · Alta · Corto plazo · Completada para la acreditación inicial.** Problema histórico: ACT-02 acreditaba ejecución local, pero el corte original del plan carecía de runs remotos. Acción realizada posteriormente: ejecutar el workflow para PR y `main` y documentar los resultados.
+- **KPI y meta alcanzada:** **1 PR** con test/build PASS y deploy omitido según diseño ([run `36277313303`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36277313303)); **1 push a `main`** con cuatro jobs PASS, deploy-test, smoke 5/5 y limpieza ([run `36278602691`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691)). Baseline histórico: sin evidencia remota en el corte original; estado actual: ambos runs acreditados.
+- **Evidencia:** [IDs, URLs, artefactos y log remoto](../evidencias/cicd/github-actions-remote.md).
+- **Dependencias:** publicación realizada por el equipo antes de esta actualización; conservar evidencia de futuros runs al repetir el pipeline.
 
-**CI-02 — CI/CD · Alta · Corto plazo.** Problema: el deploy-test pasó localmente y debe conservar su reproducibilidad. Acción: mantener checks de cuatro servicios, migración, provisión Admin y limpieza en cada despliegue de prueba.
-- **KPI y meta:** smoke **5/5 HTTP 200** en cada `main` y `docker compose down -v` exitoso, incluso ante fallo; baseline local 5/5.
+**CI-02 — CI/CD · Alta · Corto plazo.** Problema: el deploy-test pasó local y remotamente; debe conservar su reproducibilidad. Acción: mantener checks de cuatro servicios, migración, provisión Admin y limpieza en cada despliegue de prueba.
+- **KPI y meta:** smoke **5/5 HTTP 200** en cada `main` y `docker compose down -v` exitoso, incluso ante fallo; baseline local y remoto 5/5 en el run verificado.
 - **Evidencia:** job `deploy-test-environment`, estados de healthchecks y salida de limpieza.
 - **Dependencias:** CI-01 y datos exclusivamente efímeros.
 
@@ -183,7 +183,7 @@ Son **experimentos futuros**, no capacidades implementadas ni métricas actuales
 
 | Horizonte relativo | Entregas propuestas | Criterio para avanzar |
 |---|---|---|
-| **Corto plazo** | SEC-01 CSP; SEC-02 scan autenticado acotado; TEST-01 E2E; TEST-02 regresiones; QUAL-01 seed; CI-01 evidencia remota; CI-02 smoke/limpieza; iniciar SEC-03 y TEST-03 | Sin High abiertos, CSP evaluada, dos flujos E2E PASS, seed issue cerrado, runs y smoke acreditados. |
+| **Corto plazo** | SEC-01 CSP; SEC-02 scan autenticado acotado; TEST-01 E2E; TEST-02 regresiones; QUAL-01 seed; CI-01 evidencia remota **completada**; CI-02 smoke/limpieza recurrente; iniciar SEC-03 y TEST-03 | Sin High abiertos, CSP evaluada, dos flujos E2E PASS, seed issue cerrado; conservar runs y smoke acreditados. |
 | **Mediano plazo** | Completar TEST-03; QUAL-02 gate; QUAL-03 deuda; CI-03 seguridad/calidad en pipeline; DATA-01/02/03; GEO-01; URG-01; PROD-01; OPS-01; AI-01/02 | Datos y métodos auditables, Sonar total medido, pipeline con reportes y ranking independiente de Groq. |
 | **Largo plazo** | AI-03 benchmark; INNO-01 rutas; INNO-02 demanda; INNO-03 ficha ESG | Experimentos comparados con baselines medidos; adoptar solo al superar métricas y revisión de riesgos. |
 
@@ -201,9 +201,9 @@ Los horizontes expresan **precedencia propuesta**, no semanas transcurridas ni f
 | Coverage Sonar total | Frontend 77.8%; backend 77.9% | ≥80% por proyecto | Cada PR | SonarQube/LCOV |
 | Code smells activos | Frontend 40; backend 1 | Seed crítico 0; reducir frontend por priorización | Cada análisis | SonarQube |
 | Deuda técnica | Frontend 250 min; backend 6 min | Frontend ≤225 min; backend ≤6 min | Cada ciclo de análisis | SonarQube |
-| Smoke deploy-test | 5/5 local | 5/5 y limpieza PASS | Cada `main` | GitHub Actions + Compose |
+| Smoke deploy-test | 5/5 local y remoto en run `36278602691` | 5/5 y limpieza PASS | Cada `main` | GitHub Actions + Compose |
 | E2E lifecycle navegador | Sin suite completa | 2 terminales PASS | Cada `main` | Runner E2E |
-| Run remoto versionado | Sin evidencia | 1 PR y 1 `main` acreditados | Primera publicación y cambios posteriores | GitHub Actions |
+| Runs remotos documentados | PR `36277313303` y `main` `36278602691`, ambos PASS | Meta inicial alcanzada; conservar 1 PR y 1 `main` acreditados en siguientes entregas | Cada publicación relevante | [GitHub Actions](../evidencias/cicd/github-actions-remote.md) |
 | Origen fijo en distancias | `19.1738, -96.1342` | 0 distancias publicadas desde origen fijo | Cada cambio de matching | Tests/API y auditoría de datos |
 | Urgencia hardcodeada | `urgency_level: 4` | 0 urgencias declaradas ficticiamente | Cada cambio de matching | Tests y fuente de dato ONG |
 | Relevancia de embeddings (`NDCG@5`) | No medida | Medir baseline; ≥5 pp de mejora antes de adopción | Por experimento | Dataset etiquetado y benchmark |
@@ -217,8 +217,8 @@ En cada ciclo se guarda baseline, resultado, decisión y enlace a evidencia. Una
 - **Datos de impacto:** convertir cantidad a kg o personas sin unidad/fuente produciría cifras engañosas; excluir datos no verificables hasta aprobar metodología.
 - **Geolocalización y urgencia:** ubicar a una ONG o inferir necesidad puede revelar información sensible o sesgar prioridades; exigir consentimiento, control por rol y opción “sin dato”.
 - **IA y predicción:** modelos externos pueden cambiar o fallar, aumentar costo o introducir sesgo. Mantener fallback y ranking determinista; benchmark y revisión humana antes de adoptar innovaciones.
-- **CI remoto:** no inferir éxito de GitHub Actions a partir del smoke local; la evidencia remota sigue siendo un entregable distinto.
+- **CI remoto:** conservar por separado la evidencia de GitHub Actions y el smoke local; futuros cambios requieren nuevos runs para mantener la acreditación.
 
 ## 14. Conclusión
 
-El plan traduce el cierre en **25 acciones** con indicador, meta, evidencia, dependencia y horizonte: 8 Alta, 13 Media y 4 Baja. Primero se cierra la exposición CSP y se amplía la verificación de seguridad/confiabilidad; después se corrigen calidad y semántica de datos; por último se evalúan innovaciones frente a baselines medidos. Ninguna propuesta se presenta como implementada ni se asigna calificación.
+El plan traduce el cierre en **25 acciones** con indicador, meta, evidencia, dependencia y horizonte: 8 Alta, 13 Media y 4 Baja. **CI-01 ya acreditó los runs remotos iniciales**; las acciones restantes mantienen sus metas futuras o recurrentes. Primero se cierra la exposición CSP y se amplía la verificación de seguridad/confiabilidad; después se corrigen calidad y semántica de datos; por último se evalúan innovaciones frente a baselines medidos. No se asigna calificación.

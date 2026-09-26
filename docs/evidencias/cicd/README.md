@@ -35,11 +35,13 @@ Los valores `ci-only-*` son descartables y públicos para este runner aislado. N
 | `docker compose config --quiet`, `docker compose build`, builds Docker directos con y sin caché | PASS para ambas imágenes |
 | `./scripts/deploy-test.sh` con puertos alternativos | PASS; cuatro servicios saludables, cinco comprobaciones HTTP 200, contenedores y volúmenes eliminados |
 
-El detalle reproducible de esta ejecución y la comprobación posterior de limpieza están en [validacion-local-2026-09-26.md](validacion-local-2026-09-26.md). El umbral Rust de 80% se aplica al módulo escolar definido en ACT-01; el reporte completo y el porcentaje de funciones quedan visibles y no cumplen ese umbral. La comprobación local ejercitó las mismas órdenes principales del workflow; una ejecución real de GitHub Actions queda pendiente hasta que el equipo publique los cambios.
+El detalle reproducible de esta ejecución y la comprobación posterior de limpieza están en [validacion-local-2026-09-26.md](validacion-local-2026-09-26.md). El umbral Rust de 80% se aplica al módulo escolar definido en ACT-01; el reporte completo y el porcentaje de funciones quedan visibles y no cumplen ese umbral. Esta comprobación local ejercitó las mismas órdenes principales del workflow; la ejecución remota posterior se documenta por separado.
 
-## Evidencia que debe capturarse en GitHub Actions
+## Ejecución remota validada
 
-Después de publicar esta rama mediante el proceso normal del equipo, abrir la ejecución **FERXARP CI/CD** para un PR y para un push a `main`. Capturar: (1) los tres jobs de pruebas/build en verde en el PR, con deploy omitido; (2) los cuatro jobs en verde en `main`; (3) las líneas de salida de cobertura Rust/Jest; (4) el smoke de Chroma, backend, frontend, login y ruta Admin; (5) los artefactos `rust-coverage` y `jest-coverage-summary`. Si deploy falla, descargar `deploy-test-logs` y conservar el error del job. No se ha ejecutado todavía este workflow en GitHub porque ACT-02 prohíbe commit y push.
+En [`Rocoyoyi1527/FERXARP-rodrigo`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo), el [PR #1, run `36277313303`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36277313303) terminó `success`: backend, frontend y Docker PASS; deploy omitido correctamente por tratarse de `pull_request`. Se verificaron los artefactos `rust-coverage` y `jest-coverage-summary`.
+
+El [push a `main`, run `36278602691`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691) terminó `success` con los cuatro jobs PASS, incluido el deploy-test. Su log registró los cinco smoke HTTP 200 y la eliminación de contenedores y volúmenes. Los IDs, jobs, artefactos y log de limpieza están resumidos en [github-actions-remote.md](github-actions-remote.md). **La validación local anterior y estos dos runs remotos son evidencias distintas.**
 
 ## Reproducción local
 
