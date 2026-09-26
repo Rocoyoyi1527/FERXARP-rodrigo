@@ -2198,3 +2198,103 @@ async fn ong_shipments_show_only_own_requests_with_completion_fields() {
             .any(|item| item["donation_id"] == foreign.to_string())
     );
 }
+
+#[tokio::test]
+async fn donation_lists_preserve_owner_and_public_feed_boundaries() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let other = user(&pool, Role::Empresa).await;
+    let available = donation(&pool, owner, None).await;
+    let reserved = donation(&pool, owner, None).await;
+    let foreign = donation(&pool, other, None).await;
+    sqlx::query("UPDATE donations SET status = 'reservado' WHERE id = $1")
+        .bind(reserved)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, own) = send(
+        &app,
+        "GET",
+        "/api/donations",
+        Some(&token(owner, Role::Empresa)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let own = own.as_array().unwrap();
+    assert!(own.iter().any(|item| item["id"] == available.to_string()));
+    assert!(own.iter().any(|item| item["id"] == reserved.to_string()));
+    assert!(!own.iter().any(|item| item["id"] == foreign.to_string()));
+
+    let (status, feed) = send(
+        &app,
+        "GET",
+        "/api/donations/feed",
+        Some(&token(owner, Role::Empresa)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let feed = feed.as_array().unwrap();
+    assert!(feed.iter().any(|item| item["id"] == available.to_string()));
+    assert!(feed.iter().any(|item| item["id"] == foreign.to_string()));
+    assert!(!feed.iter().any(|item| item["id"] == reserved.to_string()));
+    assert!(feed.iter().all(|item| item["status"] == "en_acopio"));
+}
+
+#[tokio::test]
+async fn shipment_views_limit_companies_and_allow_admin_ceo_audit() {
+    let (app, pool) = app().await;
+    let owner = user(&pool, Role::Empresa).await;
+    let other = user(&pool, Role::Empresa).await;
+    let ngo_user = user(&pool, Role::Ong).await;
+    let ngo_id = ngo(&pool, ngo_user, true).await;
+    let own = reserved_donation(&pool, owner, ngo_id).await;
+    let foreign = reserved_donation(&pool, other, ngo_id).await;
+
+    let (status, shipments) = send(
+        &app,
+        "GET",
+        "/api/donations/shipments",
+        Some(&token(owner, Role::Empresa)),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = shipments.as_array().unwrap();
+    assert!(
+        items
+            .iter()
+            .any(|item| item["donation_id"] == own.to_string())
+    );
+    assert!(
+        !items
+            .iter()
+            .any(|item| item["donation_id"] == foreign.to_string())
+    );
+
+    for role in [Role::Admin, Role::Ceo] {
+        let auditor = user(&pool, role.clone()).await;
+        let (status, shipments) = send(
+            &app,
+            "GET",
+            "/api/donations/shipments",
+            Some(&token(auditor, role)),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let items = shipments.as_array().unwrap();
+        assert!(
+            items
+                .iter()
+                .any(|item| item["donation_id"] == own.to_string())
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| item["donation_id"] == foreign.to_string())
+        );
+    }
+}

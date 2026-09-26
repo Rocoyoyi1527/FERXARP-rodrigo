@@ -85,6 +85,36 @@ pnpm dev
 
 Con el backend local disponible en `http://localhost:8000`, abre `http://localhost:3000`. Para validar el frontend ejecuta `pnpm lint`, `pnpm exec tsc --noEmit` y `pnpm build`. La aprobación de una solicitud mantiene la donación reservada; la Empresa registra la salida desde `/shipments` y la ONG registra la entrega o el rechazo con motivo.
 
+## Pruebas y cobertura
+
+Levanta PostgreSQL y ChromaDB locales (`docker compose up -d postgres chromadb`) y aplica las migraciones (`cd backend && sqlx migrate run`) antes de probar Rust. Los tests crean una base aislada `ferxarp_security_test`. Instala `cargo-llvm-cov` y los componentes LLVM de tu toolchain; en distribuciones que usan LLVM del sistema, exporta `LLVM_COV=/usr/bin/llvm-cov` y `LLVM_PROFDATA=/usr/bin/llvm-profdata`. SQLx puede usar la metadata versionada con `SQLX_OFFLINE=true` durante tests y cobertura.
+
+```bash
+cd backend
+cargo fmt --check
+cargo check --locked
+cargo test --locked
+cargo clippy --all-targets --all-features -- -D warnings
+cargo sqlx prepare --check -- --locked
+mkdir -p coverage
+cargo llvm-cov --all-features --workspace --lcov --output-path coverage/lcov.info
+./scripts/coverage.sh
+```
+
+`scripts/coverage.sh` genera resúmenes completos y del módulo escolar y falla si el segundo baja de 80% de líneas. El segundo incluye JWT, RBAC, donaciones, escáner, bootstrap Admin y matching local/híbrido; excluye Groq, métricas CEO, seed de demostración, binarios CLI, arranque y código de la biblioteca estándar. El LCOV completo y ambos resúmenes quedan en `backend/coverage/` (ignorado por Git). La cobertura del módulo supera 80% de líneas; el total completo se informa también en [la evidencia de pruebas](docs/evidencias/testing/README.md).
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm exec tsc --noEmit
+pnpm test
+pnpm test:coverage
+pnpm build
+```
+
+Jest mide de forma fija `src/lib/api.ts`, las páginas de login, registro y envíos, y `StockScanner.tsx`, con umbral global de 80% para líneas, instrucciones, funciones y ramas. `frontend/coverage/` se genera localmente y está ignorado por Git.
+
 ---
 
 ## 📁 Estructura del Monorepositorio
