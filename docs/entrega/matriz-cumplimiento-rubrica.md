@@ -1,6 +1,6 @@
 # Matriz de cumplimiento de rúbrica FERXARP
 
-**Corte de auditoría:** 2026-09-26, rama `docs/activity-05-continuous-improvement`, HEAD `d0cf3478a5da9403a7085ece235c2ee10fe56434`. El árbol estaba limpio antes de crear esta matriz. Se revisaron artefactos versionados y una consulta de solo lectura a GitHub Actions; **no se repitieron** las suites, builds ni escáneres. Los estados describen evidencia disponible, no una calificación.
+**Corte de auditoría original:** 2026-09-26, rama `docs/activity-05-continuous-improvement`, HEAD `d0cf3478a5da9403a7085ece235c2ee10fe56434`. **Actualización posterior:** se incorporó la [evidencia remota del repositorio `Rocoyoyi1527/FERXARP-rodrigo`](../evidencias/cicd/github-actions-remote.md), verificada por GitHub CLI. El árbol estaba limpio antes de esta actualización; **no se repitieron** suites, builds ni escáneres. Los estados describen evidencia disponible, no una calificación.
 
 Fuentes: [README](../../README.md), [documentación inicial](../../documentacion.md), [testing](../evidencias/testing/README.md), [CI/CD](../evidencias/cicd/README.md), [seguridad](../evidencias/security/README.md), [calidad](../evidencias/quality/README.md), [informe de cierre](informe-cierre.md), [plan de mejora](plan-mejora-continua.md), [workflow](../../.github/workflows/ci-cd.yml), [`backend/scripts/coverage.sh`](../../backend/scripts/coverage.sh), [`scripts/deploy-test.sh`](../../scripts/deploy-test.sh), [`scripts/smoke-test.sh`](../../scripts/smoke-test.sh), [`scripts/security-scan.sh`](../../scripts/security-scan.sh) y [`scripts/sonar-scan.sh`](../../scripts/sonar-scan.sh).
 
@@ -21,7 +21,7 @@ El [resumen Jest de ACT-01](../evidencias/testing/jest-coverage-summary.json) co
 
 El [workflow](../../.github/workflows/ci-cd.yml) contiene jobs `backend-quality`, `frontend-quality`, `docker-build` y `deploy-test-environment`. Configura tests, cobertura, checks, builds Rust/Next y construcción Docker. El deploy-test corre solo en push a `main`, crea PostgreSQL, Chroma, backend y frontend, aplica migraciones, provisiona Admin de CI y espera readiness. [`smoke-test.sh`](../../scripts/smoke-test.sh) verifica **5 respuestas HTTP 200**: Chroma, `/health`, portada, login Admin y ruta Admin con JWT. [`deploy-test.sh`](../../scripts/deploy-test.sh) ejecuta `docker compose down -v --remove-orphans` al salir, incluso ante fallo.
 
-La [validación local de ACT-02](../evidencias/cicd/validacion-local-2026-09-26.md) registra builds, cuatro servicios saludables, smoke **5/5 PASS** y limpieza. **No equivale a una ejecución del runner de GitHub.** La consulta de solo lectura `gh run list --repo 07malpicadaniel-del/FERXARP --limit 10` devolvió `[]` en este corte; tampoco hay URL, ID, captura ni artefacto de run remoto en el repositorio. Por tanto, el workflow está implementado y probado localmente, pero su ejecución remota real **carece de evidencia**.
+La [validación local de ACT-02](../evidencias/cicd/validacion-local-2026-09-26.md) registra builds, cuatro servicios saludables, smoke **5/5 PASS** y limpieza. La [evidencia remota](../evidencias/cicd/github-actions-remote.md) registra además el [PR #1, run `36277313303`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36277313303), con tests/builds PASS y deploy omitido según política, y el [push a `main`, run `36278602691`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691), con tests, builds Docker, deploy-test, cinco smoke HTTP 200 y limpieza PASS. La consulta anterior se hizo a **otro repositorio** (`07malpicadaniel-del/FERXARP`); su resultado vacío no describía los runs de `Rocoyoyi1527/FERXARP-rodrigo`.
 
 ## 3. Seguridad y calidad
 
@@ -53,7 +53,7 @@ El [informe de cierre](informe-cierre.md) contiene resumen ejecutivo, objetivos,
 
 ## 5. Mejora continua
 
-El [plan de mejora](plan-mejora-continua.md) establece **25 acciones** (8 Alta, 13 Media, 4 Baja) con problema, acción, KPI/meta, evidencia esperada, dependencias y horizonte relativo. Incluye baseline y metas sin confundir resultados futuros con mediciones actuales. Contiene **3 innovaciones** —optimización de rutas, pronóstico de demanda y ficha ESG trazable— con hipótesis, datos, KPI, riesgos y MVP. Su roadmap distingue corto, mediano y largo plazo. No declara implementadas esas mejoras.
+El [plan de mejora](plan-mejora-continua.md) establece **25 acciones** (8 Alta, 13 Media, 4 Baja) con problema, acción, KPI/meta, evidencia esperada, dependencias y horizonte relativo. Incluye baseline y metas sin confundir resultados futuros con mediciones actuales. Contiene **3 innovaciones** —optimización de rutas, pronóstico de demanda y ficha ESG trazable— con hipótesis, datos, KPI, riesgos y MVP. Su roadmap distingue corto, mediano y largo plazo. La acción CI-01 de acreditación remota está marcada como completada; las demás no se presentan como implementadas.
 
 ## 6. Evidencias
 
@@ -61,18 +61,24 @@ El [plan de mejora](plan-mejora-continua.md) establece **25 acciones** (8 Alta, 
 |---|---|---|---|---|
 | 1. Implementación y seguridad | Módulo, JWT y roles operativos | Lifecycle, RBAC y ownership descritos y probados | [Testing ACT-01](../evidencias/testing/README.md); [cierre](informe-cierre.md) | CUMPLIDO |
 | 1. Implementación y seguridad | Tests Rust/Jest y cobertura ≥80% en el módulo evaluado | Último conteo 74/39 PASS; módulo Rust 85.91% líneas; Jest final 98.03% líneas | [Testing ACT-01](../evidencias/testing/README.md); [calidad ACT-03](../evidencias/quality/README.md); [cierre](informe-cierre.md) | CUMPLIDO |
-| 2. CI/CD | Workflow con tests y builds automáticos | Jobs backend, frontend y Docker; validación local PASS | [Workflow](../../.github/workflows/ci-cd.yml); [CI/CD ACT-02](../evidencias/cicd/README.md) | CUMPLIDO |
-| 2. CI/CD | Deploy-test, readiness, smoke y limpieza | Cuatro servicios saludables; 5/5 HTTP 200; `down -v` local | [Validación local](../evidencias/cicd/validacion-local-2026-09-26.md); [script](../../scripts/deploy-test.sh) | PARCIAL |
-| 2. CI/CD | Ejecución remota real acreditada | Sin run visible en consulta GitHub y sin artefacto versionado | [CI/CD ACT-02](../evidencias/cicd/README.md); consulta `gh run list` de esta auditoría | FALTA EVIDENCIA |
+| 2. CI/CD | Workflow con tests y builds automáticos | Jobs backend, frontend y Docker PASS en PR y `main` remotos | [Workflow](../../.github/workflows/ci-cd.yml); [runs remotos](../evidencias/cicd/github-actions-remote.md) | CUMPLIDO |
+| 2. CI/CD | Deploy-test, readiness, smoke y limpieza | Cuatro servicios; 5/5 HTTP 200 y `down -v` en `main` remoto y validación local | [Run de `main`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691); [evidencia](../evidencias/cicd/github-actions-remote.md) | CUMPLIDO |
+| 2. CI/CD | Ejecución remota real acreditada | PR `36277313303` PASS; `main` `36278602691` PASS; artefactos Rust/Jest verificados | [PR](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36277313303); [`main`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691) | CUMPLIDO |
 | 3. Seguridad y calidad | Scans, hallazgos, correcciones y re-scan | ZAP 0/3/3/1 → 0/1/0/1; XSS Chromium corregido; CORS/headers corregidos | [Seguridad ACT-03](../evidencias/security/README.md); [JSON ZAP final](../evidencias/security/zap-after-frontend.json) | CUMPLIDO |
 | 3. Seguridad y calidad | Riesgos residuales identificados | CSP Medium abierto; active scan autenticado completo pendiente | [Seguridad ACT-03](../evidencias/security/README.md); [plan](plan-mejora-continua.md) | PARCIAL |
 | 3. Seguridad y calidad | SonarQube, Quality Gate y métricas | PASS frontend/backend; bugs, vulnerabilities, hotspots, smells, deuda, cobertura, duplicación y ratings | [Calidad ACT-03](../evidencias/quality/README.md); [JSON backend final](../evidencias/quality/sonar-after-backend.json) | CUMPLIDO |
 | 4. Cierre | Comparación y lecciones sustentadas | Cronología Git, alcance, diferencias, incidentes y lecciones; sin retrasos inventados | [Informe de cierre](informe-cierre.md) | CUMPLIDO |
 | 5. Mejora continua | Acciones medibles e innovación | 25 acciones, KPI/meta, prioridades, horizontes, 3 MVP innovadores y roadmap | [Plan de mejora](plan-mejora-continua.md) | CUMPLIDO |
 
-**Lectura por criterio:** 1 CUMPLIDO; 2 PARCIAL por falta de run remoto; 3 PARCIAL por CSP y alcance autenticado pendiente, aunque sí existe evidencia de pruebas, correcciones y métricas; 4 CUMPLIDO; 5 CUMPLIDO. Los estados no son puntuaciones.
+| Criterio | Estado documental final | Base del estado |
+|---|---|---|
+| 1. Implementación y seguridad | CUMPLIDO | Módulo, roles, tests y umbral del módulo escolar |
+| 2. CI/CD | CUMPLIDO | PR y `main` remotos PASS; deploy-test en `main` |
+| 3. Seguridad y calidad | PARCIAL | Pruebas, correcciones y métricas acreditadas; CSP y scan autenticado completo pendientes |
+| 4. Cierre | CUMPLIDO | Informe de cierre sustentado en Git y evidencias |
+| 5. Mejora continua | CUMPLIDO | Acciones medibles, roadmap e innovaciones documentadas |
 
-**BLOQUEANTE PARA ENTREGA si se pretende acreditar ejecución remota de CI/CD:** no hay ejecución visible de GitHub Actions ni evidencia versionada de run. Antes de afirmar que el pipeline corrió en GitHub, capturar un PR PASS y un push a `main` con deploy-test PASS, URL/ID y artefactos. El código y la validación local ya existen; esta auditoría no publica cambios.
+Los estados no son puntuaciones.
 
 ## 7. Pendientes no bloqueantes
 
@@ -90,13 +96,14 @@ Casilla marcada significa **archivo o evidencia comprobada en este corte**, no e
 - [x] Plan de mejora: [plan](plan-mejora-continua.md) presente.
 - [x] Evidencia testing: [resumen ACT-01](../evidencias/testing/README.md); conviene capturar consola Rust PASS, Jest PASS/cobertura y llvm-cov del módulo.
 - [x] Evidencia CI/CD local: [resumen ACT-02](../evidencias/cicd/README.md); conviene capturar healthchecks, smoke 5/5 y salida `down -v`.
-- [ ] Evidencia de GitHub Actions **remoto en verde**: capturar PR, push a `main`, deploy-test y artefactos después de la publicación autorizada.
+- [x] Evidencia de GitHub Actions **remoto en verde**: [PR](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36277313303) y [`main`](https://github.com/Rocoyoyi1527/FERXARP-rodrigo/actions/runs/36278602691) PASS, con deploy-test, smoke, limpieza y artefactos documentados.
 - [x] Evidencia ZAP: [antes/después](../evidencias/security/README.md); conviene capturar tabla de alertas y prueba Chromium del XSS.
 - [x] Evidencia Sonar: [métricas y gate](../evidencias/quality/README.md); conviene capturar Quality Gate PASS, smells, deuda, cobertura y duplicación de ambos proyectos.
 - [x] Workflow: [archivo YAML](../../.github/workflows/ci-cd.yml) presente.
 - [ ] Demo funcional: capturar un recorrido con roles Admin, Empresa y ONG y estados de donación; no existe una captura manual de demo en estas evidencias.
 - [x] README: [archivo](../../README.md) presente y revisado; conviene ajustar las afirmaciones de geolocalización/Supabase/Groq al alcance comprobado.
-- [ ] Repositorio limpio al entregar: el pre-flight fue limpio, pero esta matriz nueva debe incorporarse mediante el proceso normal del equipo.
+- [x] Repositorio limpio en el pre-flight de esta actualización.
+- [ ] Repositorio limpio al entregar: los cambios documentales de esta actualización quedan sin commit por instrucción expresa.
 - [ ] Push final: no realizado ni autorizado en esta actividad.
 
-**Verificación mínima de esta auditoría:** archivos fuente y reportes JSON presentes y legibles; 14 secciones del plan, 3 innovaciones y enlaces relativos comprobados; sintaxis Bash de los scripts clave válida; `git diff --check` sin errores. No se ejecutaron tests, Docker, ZAP ni Sonar nuevamente.
+**Verificación mínima:** archivos fuente y reportes JSON presentes y legibles; 14 secciones del plan, 3 innovaciones y enlaces relativos comprobados; sintaxis Bash de los scripts clave válida. En esta actualización se verificaron los dos runs y artefactos por GitHub CLI, y el log remoto de los cinco smoke checks y limpieza. No se ejecutaron tests, Docker, ZAP ni Sonar nuevamente.
