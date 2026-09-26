@@ -115,6 +115,20 @@ pnpm build
 
 Jest mide de forma fija `src/lib/api.ts`, las páginas de login, registro y envíos, y `StockScanner.tsx`, con umbral global de 80% para líneas, instrucciones, funciones y ramas. `frontend/coverage/` se genera localmente y está ignorado por Git.
 
+## CI/CD
+
+El workflow [FERXARP CI/CD](.github/workflows/ci-cd.yml) valida Rust y Next.js en pull requests y pushes a `main`; después construye ambas imágenes Docker. Un push a `main` despliega además una instancia de prueba efímera en el runner, aplica migraciones, provisiona un Admin exclusivo de CI, comprueba Chroma, backend, frontend, login y una ruta Admin, y elimina contenedores y volúmenes al terminar. No despliega producción ni requiere credenciales reales. Los umbrales de cobertura de ACT-01 rompen el job si retroceden.
+
+Para repetir el deploy de prueba sin tocar los contenedores locales existentes, desde la raíz usa puertos alternativos. Los comandos Compose manuales requieren `backend/.env` local; el script crea su propio archivo temporal y puede ejecutarse sin él:
+
+```bash
+docker compose config --quiet
+docker compose build
+POSTGRES_PORT=15433 CHROMA_PORT=18001 BACKEND_PORT=18000 FRONTEND_PORT=13000 ./scripts/deploy-test.sh
+```
+
+El script usa solo valores CI descartables, un proyecto Compose propio y un archivo temporal fuera del repositorio; borra sus volúmenes al salir. La [evidencia del pipeline](docs/evidencias/cicd/README.md) enumera jobs, artefactos y pasos para revisar la ejecución en GitHub Actions.
+
 ---
 
 ## 📁 Estructura del Monorepositorio
