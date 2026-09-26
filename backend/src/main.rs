@@ -1,9 +1,16 @@
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    http::{HeaderValue, Method, header},
+    routing::get,
+};
 use dotenv::dotenv;
 use sqlx::{Pool, Postgres, postgres::PgPoolOptions};
 use std::env;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    set_header::SetResponseHeaderLayer,
+};
 use tracing::info;
 
 pub use backend::ai;
@@ -61,7 +68,31 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+fn cors_layer(frontend_origin: &str) -> CorsLayer {
+    let origin = HeaderValue::from_str(frontend_origin)
+        .expect("FRONTEND_ORIGIN debe ser un origen HTTP válido sin caracteres de control");
+    assert!(
+        (frontend_origin.starts_with("http://") || frontend_origin.starts_with("https://"))
+            && !frontend_origin.ends_with('/')
+            && !frontend_origin.contains('*'),
+        "FRONTEND_ORIGIN debe ser un origen HTTP(S) concreto, sin ruta ni comodines"
+    );
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list([origin]))
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+        .expose_headers([header::HeaderName::from_static("x-matching-mode")])
+}
+
 fn build_router(shared_state: Arc<AppState>) -> Router {
+    let frontend_origin =
+        env::var("FRONTEND_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_owned());
     Router::new()
         .route("/health", get(health_check))
         .nest("/api/auth", api::auth::router())
@@ -69,7 +100,11 @@ fn build_router(shared_state: Arc<AppState>) -> Router {
         .nest("/api/scanner", api::scanner::router())
         .nest("/api/metrics", api::metrics::router())
         .nest("/api/seed", api::seed::router())
-        .layer(CorsLayer::permissive())
+        .layer(cors_layer(&frontend_origin))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
         .with_state(shared_state)
 }
 

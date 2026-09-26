@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, MapPoint } from "@/lib/api";
+import { createMapPopupContent } from "@/lib/mapPopup";
 import type { Layer, Map as LeafletMap, Marker } from "leaflet";
 
 export default function MapPage() {
@@ -130,20 +131,7 @@ export default function MapPage() {
         const marker = L.marker([p.latitude, p.longitude], { icon: customIcon }).addTo(map);
         markersGroup.push(marker);
 
-        marker.bindPopup(
-          `
-          <div style="font-family: inherit; padding: 4px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-              <strong style="color: #ffffff; font-size: 13px;">${p.name}</strong>
-              <span style="font-size: 9px; font-family: monospace; text-transform: uppercase; padding: 2px 6px; border-radius: 9999px; background: #060907; border: 1px solid rgba(36, 62, 49, 0.8); color: ${isAcopio ? "#34d399" : "#6ee7b7"};">
-                ${isAcopio ? "Almacén Central" : "Organización"}
-              </span>
-            </div>
-            <p style="margin: 0; color: #8fa896; font-size: 11px; line-height: 1.4;">${p.details}</p>
-          </div>
-          `,
-          { className: "custom-popup" }
-        );
+        marker.bindPopup(createMapPopupContent(p), { className: "custom-popup" });
 
         if (!isAcopio && acopioPoint) {
           L.polyline(

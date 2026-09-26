@@ -116,6 +116,52 @@ fn router_for_with_config(
 }
 
 #[tokio::test]
+async fn cors_allows_only_configured_frontend_and_sets_nosniff() {
+    let app = router_for(&pool().await);
+    let allowed = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .header("origin", "http://localhost:3000")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed.status(), StatusCode::OK);
+    assert_eq!(
+        allowed
+            .headers()
+            .get("access-control-allow-origin")
+            .unwrap(),
+        "http://localhost:3000"
+    );
+    assert_eq!(
+        allowed.headers().get("x-content-type-options").unwrap(),
+        "nosniff"
+    );
+
+    let denied = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .header("origin", "https://untrusted.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::OK);
+    assert!(
+        denied
+            .headers()
+            .get("access-control-allow-origin")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn seed_veracruz_reuses_chroma_index_without_groq() {
     let pool = pool().await;
     dotenv::dotenv().ok();

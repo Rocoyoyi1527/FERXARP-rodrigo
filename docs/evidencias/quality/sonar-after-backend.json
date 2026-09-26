@@ -1,0 +1,64 @@
+{
+  "project": "ferxarp-backend",
+  "server_version": "26.9.0.129388",
+  "quality_gate": {
+    "status": "OK",
+    "conditions": [
+      {
+        "status": "OK",
+        "metricKey": "new_coverage",
+        "comparator": "LT",
+        "errorThreshold": "80",
+        "actualValue": "100.0"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_duplicated_lines_density",
+        "comparator": "GT",
+        "errorThreshold": "3",
+        "actualValue": "0.0"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_violations",
+        "comparator": "GT",
+        "errorThreshold": "0",
+        "actualValue": "0"
+      }
+    ],
+    "ignoredConditions": false,
+    "period": {
+      "mode": "PREVIOUS_VERSION",
+      "date": "2026-09-26T21:34:38+0000"
+    },
+    "caycStatus": "compliant"
+  },
+  "measures": {
+    "coverage": "77.9",
+    "bugs": "0",
+    "reliability_rating": "1.0",
+    "code_smells": "1",
+    "duplicated_lines_density": "6.0",
+    "security_rating": "1.0",
+    "ncloc": "2789",
+    "vulnerabilities": "0",
+    "security_hotspots": "0",
+    "sqale_index": "6",
+    "sqale_rating": "1.0"
+  },
+  "issues_total": 1,
+  "issues": [
+    {
+      "key": "605c4b7c-e9ce-4248-8592-28953cfa955c",
+      "rule": "rust:S3776",
+      "type": "CODE_SMELL",
+      "severity": "CRITICAL",
+      "component": "ferxarp-backend:src/api/seed.rs",
+      "line": 73,
+      "message": "Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed.",
+      "status": "OPEN"
+    }
+  ],
+  "hotspots_total": 0,
+  "hotspots": []
+}

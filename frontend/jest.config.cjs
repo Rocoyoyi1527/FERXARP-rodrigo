@@ -10,6 +10,8 @@ module.exports = {
   },
   collectCoverageFrom: [
     'src/lib/api.ts',
+    'src/lib/mapPopup.ts',
+    'src/components/dashboard/GardenGraph.tsx',
     'src/app/(auth)/login/page.tsx',
     'src/app/(auth)/register/page.tsx',
     'src/app/shipments/page.tsx',

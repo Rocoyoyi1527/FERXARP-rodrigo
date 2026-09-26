@@ -1,0 +1,108 @@
+{
+  "phase": "after",
+  "sample_id": "corrected",
+  "backend_url": "http://127.0.0.1:18004",
+  "checks": [
+    {
+      "id": "admin_login",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "probe": null,
+      "status": 200
+    },
+    {
+      "id": "login_sqli",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "probe": "' OR '1'='1",
+      "status": 401
+    },
+    {
+      "id": "register_literal_quote",
+      "method": "POST",
+      "path": "/api/auth/register",
+      "probe": "sqli-corrected.' OR '1'='1@example.invalid",
+      "status": 201
+    },
+    {
+      "id": "login_literal_quote",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "probe": null,
+      "status": 200
+    },
+    {
+      "id": "register_ngo_html",
+      "method": "POST",
+      "path": "/api/auth/register",
+      "probe": "<img src=x onerror=alert(1)>",
+      "status": 201
+    },
+    {
+      "id": "map_points_authenticated",
+      "method": "GET",
+      "path": "/api/scanner/map-points",
+      "probe": null,
+      "status": 200
+    },
+    {
+      "id": "ngo_name_stored_and_returned",
+      "probe": "<img src=x onerror=alert(1)>",
+      "observed": true
+    },
+    {
+      "id": "donation_literal_quote",
+      "method": "POST",
+      "path": "/api/donations",
+      "probe": "' OR '1'='1",
+      "status": 201
+    },
+    {
+      "id": "donations_authenticated",
+      "method": "GET",
+      "path": "/api/donations",
+      "probe": null,
+      "status": 200
+    },
+    {
+      "id": "donation_literal_returned",
+      "probe": "' OR '1'='1",
+      "observed": true
+    },
+    {
+      "id": "donation_id_sqli",
+      "method": "GET",
+      "path": "/api/donations/%27%20OR%20%271%27%3D%271/matches?include_ai=false",
+      "probe": "' OR '1'='1",
+      "status": 400
+    },
+    {
+      "id": "match_filter_sqli",
+      "method": "GET",
+      "path": "/api/donations/de983bc2-11d0-4b63-89aa-a0731191c875/matches?include_ai=%27%20OR%20%271%27%3D%271",
+      "probe": "' OR '1'='1",
+      "status": 400
+    },
+    {
+      "id": "scanner_uuid_sqli",
+      "method": "POST",
+      "path": "/api/scanner/scan",
+      "probe": "' OR '1'='1",
+      "status": 422
+    },
+    {
+      "id": "tracking_id_sqli",
+      "method": "GET",
+      "path": "/api/scanner/tracking/%27%20OR%20%271%27%3D%271",
+      "probe": "' OR '1'='1",
+      "status": 400
+    },
+    {
+      "id": "seed_unauthenticated",
+      "method": "POST",
+      "path": "/api/seed/veracruz?include_ai=false",
+      "probe": "No JWT; no mutation expected",
+      "status": 401
+    }
+  ]
+}

@@ -1,0 +1,508 @@
+{
+  "project": "ferxarp-frontend",
+  "server_version": "26.9.0.129388",
+  "quality_gate": {
+    "status": "OK",
+    "conditions": [
+      {
+        "status": "OK",
+        "metricKey": "new_coverage",
+        "comparator": "LT",
+        "errorThreshold": "80",
+        "actualValue": "93.1"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_duplicated_lines_density",
+        "comparator": "GT",
+        "errorThreshold": "3",
+        "actualValue": "0.0"
+      },
+      {
+        "status": "OK",
+        "metricKey": "new_violations",
+        "comparator": "GT",
+        "errorThreshold": "0",
+        "actualValue": "0"
+      }
+    ],
+    "ignoredConditions": false,
+    "period": {
+      "mode": "PREVIOUS_VERSION",
+      "date": "2026-09-26T21:33:04+0000"
+    },
+    "caycStatus": "compliant"
+  },
+  "measures": {
+    "coverage": "77.8",
+    "bugs": "0",
+    "reliability_rating": "1.0",
+    "code_smells": "40",
+    "duplicated_lines_density": "0.0",
+    "security_rating": "1.0",
+    "ncloc": "2224",
+    "vulnerabilities": "0",
+    "security_hotspots": "0",
+    "sqale_index": "250",
+    "sqale_rating": "1.0"
+  },
+  "issues_total": 46,
+  "issues": [
+    {
+      "key": "4168fca3-a01b-48a3-aec8-2c36ba2c33ae",
+      "rule": "typescript:S3776",
+      "type": "CODE_SMELL",
+      "severity": "CRITICAL",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "message": "Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed.",
+      "status": "CLOSED"
+    },
+    {
+      "key": "5b2bd3e2-b09e-495d-9332-f6b1be130bd4",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "CLOSED"
+    },
+    {
+      "key": "633e03d6-45d4-4359-b552-02b077ae25dc",
+      "rule": "typescript:S4624",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "message": "Refactor this code to not use nested template literals.",
+      "status": "CLOSED"
+    },
+    {
+      "key": "d51b93b1-9f0f-4690-9fd6-cac27e82020c",
+      "rule": "typescript:S3776",
+      "type": "CODE_SMELL",
+      "severity": "CRITICAL",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "message": "Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed.",
+      "status": "CLOSED"
+    },
+    {
+      "key": "e5b252eb-a9fa-45db-8e24-4c9d4d90d4d7",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "CLOSED"
+    },
+    {
+      "key": "8b4f03ce-fc57-4df4-8f66-bc801734675c",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "line": 110,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "fe381cea-73fe-4669-9662-18013586f3bc",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/app/layout.tsx",
+      "line": 10,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "234e5832-faef-43bd-b0e5-490e6f7c71f1",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/shipments/page.tsx",
+      "line": 92,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "34943ac8-9a2d-4f66-83cb-df247cc11dd4",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/shipments/page.tsx",
+      "line": 92,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "354ef1f5-d6dc-439e-8d4c-ff96ba7da56d",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/shipments/page.tsx",
+      "line": 92,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "133b1603-4efe-4fca-9362-a0df170d2712",
+      "rule": "typescript:S6819",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/shipments/page.tsx",
+      "line": 143,
+      "message": "Use <output> instead of the \"status\" role to ensure accessibility across all devices.",
+      "status": "OPEN"
+    },
+    {
+      "key": "f253570c-1317-4b1e-82f1-a62abefedb59",
+      "rule": "typescript:S6819",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationForm.tsx",
+      "line": 50,
+      "message": "Use <output> instead of the \"status\" role to ensure accessibility across all devices.",
+      "status": "OPEN"
+    },
+    {
+      "key": "404399e3-5d6d-4b51-8063-a15d81218d46",
+      "rule": "typescript:S6819",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/Navbar.tsx",
+      "line": 135,
+      "message": "Use <output> instead of the \"status\" role to ensure accessibility across all devices.",
+      "status": "OPEN"
+    },
+    {
+      "key": "61705398-b420-4ee6-b7d4-481d03055512",
+      "rule": "typescript:S6819",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/OngCanopy.tsx",
+      "line": 87,
+      "message": "Use <output> instead of the \"status\" role to ensure accessibility across all devices.",
+      "status": "OPEN"
+    },
+    {
+      "key": "ed0b2048-189d-4fed-805c-e7d60f9e5238",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/OngCanopy.tsx",
+      "line": 187,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "3c27ae28-f8d0-4615-8566-cd40d916b42a",
+      "rule": "typescript:S1874",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/scanner/StockScanner.tsx",
+      "line": 3,
+      "message": "'FormEvent' is deprecated.",
+      "status": "OPEN"
+    },
+    {
+      "key": "f261aec3-2320-4a9f-96a1-bde266362f50",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/scanner/StockScanner.tsx",
+      "line": 15,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "55b63651-d089-42f6-924c-f87a3e60aa12",
+      "rule": "typescript:S1874",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/scanner/StockScanner.tsx",
+      "line": 63,
+      "message": "'FormEvent' is deprecated.",
+      "status": "OPEN"
+    },
+    {
+      "key": "a5caa18a-f158-478c-af1d-7b906e799a44",
+      "rule": "typescript:S6819",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/scanner/StockScanner.tsx",
+      "line": 107,
+      "message": "Use <dialog> instead of the \"dialog\" role to ensure accessibility across all devices.",
+      "status": "OPEN"
+    },
+    {
+      "key": "182eb8ef-1335-42bd-a117-6d21e64d68d8",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "CLOSED"
+    },
+    {
+      "key": "94d8c987-b0bb-41bf-a224-ba2b9fee014c",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/Navbar.tsx",
+      "line": 98,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "bb7eec31-642a-4031-ba4c-d4d5f27378ed",
+      "rule": "typescript:S6479",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/Navbar.tsx",
+      "line": 210,
+      "message": "Do not use Array index in keys",
+      "status": "OPEN"
+    },
+    {
+      "key": "69703310-326e-49a6-8e77-fe2012800637",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/dashboard/page.tsx",
+      "line": 98,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "0a8e5e57-0a4e-454a-a235-87a6ff037fc9",
+      "rule": "typescript:S3358",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/dashboard/page.tsx",
+      "line": 100,
+      "message": "Extract this nested ternary operation into an independent statement.",
+      "status": "OPEN"
+    },
+    {
+      "key": "27f16961-e1bb-4a8e-91b6-8f2d67ee850b",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/AdminAudit.tsx",
+      "line": 76,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "11c03e18-9201-4319-bdc0-f01c2c99357d",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/AdminAudit.tsx",
+      "line": 110,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "0257a569-89f4-4cab-8cff-fa745e01e571",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/AdminAudit.tsx",
+      "line": 115,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "b6e99cc8-0f36-4f4a-81af-aff621a9fbeb",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/OngCanopy.tsx",
+      "line": 97,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "3e3a34be-3aa4-4ae6-a2e0-eb72426afc71",
+      "rule": "typescript:S6582",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/lib/api.ts",
+      "line": 153,
+      "message": "Prefer using an optional chain expression instead, as it's more concise and easier to read.",
+      "status": "OPEN"
+    },
+    {
+      "key": "ebd2d834-8957-4c9e-9aae-c3e076278c61",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationList.tsx",
+      "line": 12,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "ba838337-d91f-419f-9e92-109834f26a81",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationList.tsx",
+      "line": 25,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "54ad8719-ded9-45c5-a952-1c4b9ea80125",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationList.tsx",
+      "line": 32,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "9fc5f323-7179-4031-9d36-6c37f293ce28",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationList.tsx",
+      "line": 41,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "5cb4be3c-08d5-4de9-80b1-2e8f79848cca",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/dashboard/GardenGraph.tsx",
+      "line": 39,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "2d1a0039-2d53-449b-acef-5b3a72cf7cb0",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/dashboard/Navbar.tsx",
+      "line": 106,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "c92caad4-c0a8-400a-ba97-6724dbd86ced",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/ui/Button.tsx",
+      "line": 8,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "cca003a9-15e3-4583-8c2b-574573fec4a7",
+      "rule": "typescript:S6772",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/components/ui/Button.tsx",
+      "line": 38,
+      "message": "Ambiguous spacing after previous element span",
+      "status": "OPEN"
+    },
+    {
+      "key": "04b8b713-f6d1-45dd-832f-a3d957fb98b1",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/ui/Input.tsx",
+      "line": 8,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "3afe70a7-2078-470a-b65d-650da5024399",
+      "rule": "typescript:S1874",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/app/(auth)/login/page.tsx",
+      "line": 18,
+      "message": "'FormEvent' is deprecated.",
+      "status": "OPEN"
+    },
+    {
+      "key": "9fbceaef-bc5e-460d-858c-bad7822ab243",
+      "rule": "typescript:S1874",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/app/(auth)/register/page.tsx",
+      "line": 19,
+      "message": "'FormEvent' is deprecated.",
+      "status": "OPEN"
+    },
+    {
+      "key": "ebade3a7-cd5e-44be-b524-7ddc2c88bd99",
+      "rule": "typescript:S6853",
+      "type": "CODE_SMELL",
+      "severity": "MAJOR",
+      "component": "ferxarp-frontend:src/app/(auth)/register/page.tsx",
+      "line": 68,
+      "message": "A form label must be associated with a control.",
+      "status": "OPEN"
+    },
+    {
+      "key": "eeb253e5-d88e-44c2-a84a-8aaf6b6fef50",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationForm.tsx",
+      "line": 12,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "95591100-ea03-4cf5-809c-93e0624445de",
+      "rule": "typescript:S1874",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/dashboard/DonationForm.tsx",
+      "line": 21,
+      "message": "'FormEvent' is deprecated.",
+      "status": "OPEN"
+    },
+    {
+      "key": "b8914a81-cc49-4dac-bb3e-02b0f3a34a2c",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/dashboard/MatchingResults.tsx",
+      "line": 11,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "1009701a-c6f6-43bc-8dbb-c8d386e013e8",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/dashboard/Navbar.tsx",
+      "line": 27,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    },
+    {
+      "key": "f1a2fddc-702d-4012-a572-15d3a3d62c67",
+      "rule": "typescript:S6759",
+      "type": "CODE_SMELL",
+      "severity": "MINOR",
+      "component": "ferxarp-frontend:src/components/ui/Card.tsx",
+      "line": 3,
+      "message": "Mark the props of the component as read-only.",
+      "status": "OPEN"
+    }
+  ],
+  "hotspots_total": 0,
+  "hotspots": []
+}

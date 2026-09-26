@@ -55,6 +55,7 @@ services:
     environment:
       - PORT=8000
       - CHROMA_URL=http://chromadb:8000
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:3000}
       - DATABASE_URL=postgres://${POSTGRES_USER:-ferxarp}:${POSTGRES_PASSWORD:-ferxarp_local_only}@postgres:5432/${POSTGRES_DB:-ferxarp}
     depends_on:
       postgres:

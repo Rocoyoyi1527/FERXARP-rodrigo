@@ -119,6 +119,10 @@ Jest mide de forma fija `src/lib/api.ts`, las páginas de login, registro y env�
 
 El workflow [FERXARP CI/CD](.github/workflows/ci-cd.yml) valida Rust y Next.js en pull requests y pushes a `main`; después construye ambas imágenes Docker. Un push a `main` despliega además una instancia de prueba efímera en el runner, aplica migraciones, provisiona un Admin exclusivo de CI, comprueba Chroma, backend, frontend, login y una ruta Admin, y elimina contenedores y volúmenes al terminar. No despliega producción ni requiere credenciales reales. Los umbrales de cobertura de ACT-01 rompen el job si retroceden.
 
+## Seguridad y calidad
+
+En ACT-03 se probaron frontend y backend locales con OWASP ZAP (baseline y active, rutas públicas), además de pruebas HTTP autenticadas y una verificación XSS en Chromium. La reproducción con red Docker interna y los hallazgos antes/después están en [evidencia de seguridad](docs/evidencias/security/README.md); `scripts/security-scan.sh before|after` ejecuta los scans ZAP sobre el entorno efímero. La evaluación SonarQube local de TypeScript y Rust, su Quality Gate, cobertura, deuda y code smells se encuentran en [evidencia de calidad](docs/evidencias/quality/README.md); `scripts/sonar-scan.sh before|after` requiere `SONAR_TOKEN` solo en el entorno y los LCOV generados. La falta de CSP en el frontend y un code smell crítico del seed Rust permanecen documentados.
+
 Para repetir el deploy de prueba sin tocar los contenedores locales existentes, desde la raíz usa puertos alternativos. Los comandos Compose manuales requieren `backend/.env` local; el script crea su propio archivo temporal y puede ejecutarse sin él:
 
 ```bash
