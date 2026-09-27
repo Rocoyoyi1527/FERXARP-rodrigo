@@ -1,0 +1,21 @@
+{
+  "register_empresa": "PASS",
+  "register_ong": "PASS",
+  "admin_verificar": "PASS",
+  "admin_revocar": "PASS",
+  "login": "PASS",
+  "crear_donacion": "PASS",
+  "matching": "PASS",
+  "solicitar": "PASS",
+  "aprobar": "PASS",
+  "registrar_salida": "PASS",
+  "entregar": "PASS",
+  "rechazar": "PASS",
+  "geo_denied": "PASS",
+  "map_markers": "PASS",
+  "popup_demo": "PASS",
+  "geo_granted_browser_simulation": "PASS",
+  "logout": "PASS",
+  "ceo_metrics": "PASS",
+  "mobile_navigation": "PASS"
+}
