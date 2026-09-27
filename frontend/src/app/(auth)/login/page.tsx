@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api, apiErrorMessage } from "@/lib/api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { AuthIntro } from "@/components/ui/AuthIntro";
 import { Card } from "@/components/ui/Card";
 
 export default function LoginPage() {
@@ -37,14 +38,14 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4">
+    <main className="auth-page"><div className="auth-wrap"><AuthIntro />
       <Card
         title="Iniciar Sesión"
-        subtitle="Acceso a la plataforma Fexarp"
+        subtitle="Bienvenido. Continúa ayudando desde tu cuenta."
         className="max-w-md w-full shadow-2xl"
       >
         {error && (
-          <div className="mb-4 text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 p-2.5 rounded">
+          <div role="alert" className="notice notice-error mb-4">
             {error}
           </div>
         )}
@@ -53,6 +54,7 @@ export default function LoginPage() {
           <Input
             label="Correo electrónico"
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="contacto@organizacion.com"
@@ -62,6 +64,7 @@ export default function LoginPage() {
           <Input
             label="Contraseña"
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••••••"
@@ -72,14 +75,14 @@ export default function LoginPage() {
             {loading ? "Validando credenciales..." : "Ingresar"}
           </Button>
 
-          <p className="text-center text-xs text-neutral-400 pt-2">
+          <p className="text-center text-sm text-garden-sage pt-2">
             ¿No tienes cuenta?{" "}
-            <Link href="/register" className="text-neutral-200 underline hover:text-white">
+            <Link href="/register" className="text-garden-leaf font-semibold underline">
               Regístrate aquí
             </Link>
           </p>
         </form>
       </Card>
-    </main>
+    </div></main>
   );
 }

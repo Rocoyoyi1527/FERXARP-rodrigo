@@ -103,6 +103,10 @@ export interface MapPoint {
   details: string;
 }
 
+export interface NgoAuditItem {
+  id: string; name: string; email: string; needs_description?: string; is_verified: boolean; created_at: string;
+}
+
 export interface ImpactMetrics {
   total_donations: number;
   delivered_donations: number;
@@ -200,6 +204,9 @@ export const api = {
     request<ScanResult>("/api/scanner/scan", { method: "POST", body: JSON.stringify(data) }),
 
   getMapPoints: () => request<MapPoint[]>("/api/scanner/map-points"),
+
+  listNgos: () => request<NgoAuditItem[]>("/api/auth/ngos"),
+  toggleNgoVerification: (id: string) => request<void>(`/api/auth/ngos/${id}/verify`, { method: "POST" }),
 
   // Métricas del CEO
   getImpactMetrics: () => request<ImpactMetrics>("/api/metrics/summary"),
