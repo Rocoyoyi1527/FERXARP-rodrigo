@@ -2,7 +2,7 @@
 
 **Corte documental:** commit `9792bcd7c4842e812ea0313d2831a91924455942`, fechado el 26-09-2026 en Git. **Base de este informe:** historial y archivos versionados del repositorio. Este documento no asigna calificación ni estima horas de trabajo.
 
-**Actualización documental posterior:** se incorporaron los runs remotos de PR y `main` en [evidencia GitHub Actions](../evidencias/cicd/github-actions-remote.md). Las métricas y demás hallazgos conservan su corte original.
+**Actualización documental posterior:** se incorporaron los runs remotos de PR y `main` en [evidencia GitHub Actions](../evidencias/cicd/github-actions-remote.md). Las métricas y demás hallazgos de ACT-01/02/03 conservan su corte original; el estado posterior del frontend se añade por separado en la sección 7.
 
 ## 1. Resumen ejecutivo
 
@@ -90,7 +90,7 @@ Estas filas no implican duración, costo ni culpa atribuible a una persona. Cuan
 | Medición/validación | Valor documentado | Alcance preciso |
 |---|---|---|
 | Tests Rust al cierre | **74 PASS** | Suite final ACT-03; ACT-01/02 registraron 73 antes de la nueva prueba CORS |
-| Tests Jest al cierre | **39 PASS** | Suite final ACT-03; ACT-01/02 registraron 35 antes de las regresiones |
+| Tests Jest al cierre ACT-03 | **39 PASS** | Suite final ACT-03; ACT-01/02 registraron 35 antes de las regresiones |
 | Cobertura Rust módulo escolar | **85.91% líneas** | Archivos definidos por [ACT-01](../evidencias/testing/README.md); no es todo el backend |
 | Cobertura Rust completa ACT-02 | **74.48% líneas** | Reporte completo de esa ejecución local; valor histórico, no sustituye medición Sonar ACT-03 |
 | Cobertura Jest ACT-03 | **98.03% líneas; 90.27% ramas** | Conjunto instrumentado por Jest, no todo `frontend/src` |
@@ -98,6 +98,12 @@ Estas filas no implican duración, costo ni culpa atribuible a una persona. Cuan
 | Deploy-test ACT-02 | **PASS local y remoto** | PostgreSQL, Chroma, backend y frontend saludables; cinco respuestas smoke HTTP 200; `down -v` en `main` |
 
 El [workflow](../../.github/workflows/ci-cd.yml) define jobs de backend, frontend, build Docker y despliegue efímero en push a `main`. La ejecución local del script consta en [validación ACT-02](../evidencias/cicd/validacion-local-2026-09-26.md); los runs remotos de PR y `main` constan por separado en [evidencia GitHub Actions](../evidencias/cicd/github-actions-remote.md).
+
+### Actualización final del frontend — FERXARP-UI-01
+
+El rediseño **“Red Verde Solidaria”** incorpora superficies claras/verdes y navegación por rol, con responsive validada en **1440, 1280, 768 y 390 px**. La validación final confirmó **44 tests Jest PASS**, lint, typecheck, cobertura, build Next y build/arranque Docker PASS. Jest registró **98.04% líneas/sentencias, 91.88% ramas y 86.2% funciones**, exclusivamente en su alcance instrumentado/configurado, no en todo el frontend; no sustituye las cifras históricas Sonar/ZAP ni las tablas ACT-03.
+
+Se corrigió la semántica del mapa: “Tu ubicación” requiere coordenadas válidas de `navigator.geolocation`; sin permiso no aparece un marcador personal ficticio, y el punto fijo de Veracruz está identificado como almacén demo/referencia. El smoke de navegador validó login, registro Empresa/ONG, logout, crear donación, matching, solicitar, aprobar, salida, entrega/rechazo, verificar/revocar ONG, mapa, CEO y navegación móvil. La geolocalización concedida se comprobó con simulación del navegador y la denegada sin marcador personal; no es una validación de GPS físico. Las [33 capturas y resultados UI](../evidencias/ui/) y los [19 resultados PASS](../evidencias/ui/ferxarp-ui01-browser-results.json) respaldan el recorrido. Esto no equivale a una suite E2E completa integrada en CI ni acredita la precisión de las estimaciones CEO.
 
 ## 8. Seguridad y calidad
 
@@ -134,7 +140,7 @@ La cobertura **nueva** final del gate fue 93.1% frontend y 100% backend. Los por
 |---|---|---|
 | P1 | CSP frontend con nonces y política compatible con Next, API y mapa | ZAP-10038 sigue Medium en [ACT-03](../evidencias/security/README.md); comprobar renderizado y re-scan antes de cerrar |
 | P2 | Complejidad de `api/seed.rs:73` | Sonar conserva `rust:S3776`, complejidad 22 frente a 15, deuda estimada 6 min |
-| P2 | Active scan autenticado y E2E de navegador más amplio | ZAP fue anónimo; hubo HTTP dirigido y una prueba Chromium de XSS, sin suite E2E completa |
+| P2 | Active scan autenticado y E2E de navegador más amplio | ZAP fue anónimo; ACT-03 aportó HTTP dirigido y Chromium para XSS. UI-01 añadió smoke funcional en navegador, pero sigue sin acreditarse una suite E2E completa integrada en CI |
 | P2 | Validación de integración Groq y de estimaciones CEO | Groq fue opcional/no invocado en pruebas; métricas CEO usan factores fijos y quedaron fuera del módulo de cobertura ACT-01 |
 
 El despliegue de producción no se realizó ni se afirma como pendiente con fecha: el workflow documentado despliega exclusivamente una instancia de prueba. No se infiere un P0 adicional a partir de ausencia de pruebas.

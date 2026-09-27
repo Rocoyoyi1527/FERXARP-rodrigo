@@ -1,6 +1,6 @@
 # 🌿 Fexarp — Ecosistema de Distribución Solidaria de Excedentes
 
-Plataforma integral orientada a canalizar excedentes operativos y alimentarios de empresas hacia organizaciones sociales verificadas mediante emparejamiento semántico vectorial, geolocalización en tiempo real y trazabilidad física con bitácora inmutable.
+Plataforma integral orientada a canalizar excedentes operativos y alimentarios de empresas hacia organizaciones sociales verificadas mediante emparejamiento semántico vectorial, mapas de puntos registrados y trazabilidad física con bitácora inmutable. La ubicación del usuario requiere permiso del navegador.
 
 ---
 
@@ -82,6 +82,8 @@ Desde `frontend/`, usa pnpm y el lockfile versionado:
 pnpm install --frozen-lockfile
 pnpm dev
 ```
+
+El frontend final **Red Verde Solidaria** usa una paleta clara/verde y navegación por rol; su [evidencia UI](docs/evidencias/ui/) documenta el smoke funcional y responsive en 1440, 1280, 768 y 390 px. El mapa solo muestra “Tu ubicación” cuando el navegador devuelve coordenadas válidas; sin permiso no coloca un marcador personal. El punto fijo de Veracruz se identifica como almacén demo/referencia, sin seguimiento GPS de envíos.
 
 Con el backend local disponible en `http://localhost:8000`, abre `http://localhost:3000`. Para validar el frontend ejecuta `pnpm lint`, `pnpm exec tsc --noEmit` y `pnpm build`. La aprobación de una solicitud mantiene la donación reservada; la Empresa registra la salida desde `/shipments` y la ONG registra la entrega o el rechazo con motivo.
 
