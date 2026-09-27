@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api, apiErrorMessage } from "@/lib/api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { AuthIntro } from "@/components/ui/AuthIntro";
+import { Icon } from "@/components/ui/Icon";
 import { Card } from "@/components/ui/Card";
 
 export default function RegisterPage() {
@@ -39,10 +41,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4">
-      <Card title="Crear Cuenta" subtitle="Registro de entidad en Fexarp" className="max-w-md w-full">
+    <main className="auth-page"><div className="auth-wrap"><AuthIntro />
+      <Card title="Crear Cuenta" subtitle="Suma tu organización a la Red Verde Solidaria." className="max-w-md w-full">
         {error && (
-          <div className="mb-4 text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 p-2.5 rounded">
+          <div role="alert" className="notice notice-error mb-4">
             {error}
           </div>
         )}
@@ -50,6 +52,7 @@ export default function RegisterPage() {
           <Input
             label="Correo corporativo / institucional"
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ejemplo@organizacion.com"
@@ -58,6 +61,7 @@ export default function RegisterPage() {
           <Input
             label="Contraseña"
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••••••"
@@ -65,11 +69,13 @@ export default function RegisterPage() {
           />
 
           <div className="space-y-1">
-            <label className="block text-xs text-neutral-400">Tipo de Organización</label>
+            <label htmlFor="organization-role" className="field-label">Tipo de Organización</label>
+            <div className="role-choice">{(["empresa", "ong"] as const).map((value) => <button key={value} type="button" aria-pressed={role === value} onClick={() => setRole(value)}><Icon name={value === "empresa" ? "box" : "users"}/><strong className="block mt-2">{value === "empresa" ? "Empresa" : "ONG"}</strong><span>{value === "empresa" ? "Quiero donar" : "Quiero recibir"}</span></button>)}</div>
             <select
+              id="organization-role"
               value={role}
               onChange={(e) => setRole(e.target.value as "empresa" | "ong")}
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-neutral-600 cursor-pointer"
+              className="field"
             >
               <option value="empresa">Empresa Donante</option>
               <option value="ong">ONG / Organización Benéfica</option>
@@ -80,14 +86,14 @@ export default function RegisterPage() {
             {loading ? "Creando cuenta..." : "Registrarse"}
           </Button>
 
-          <p className="text-center text-xs text-neutral-400 pt-2">
+          <p className="text-center text-sm text-garden-sage pt-2">
             ¿Ya tienes cuenta?{" "}
-            <Link href="/login" className="text-neutral-200 underline hover:text-white">
+            <Link href="/login" className="text-garden-leaf font-semibold underline">
               Inicia sesión
             </Link>
           </p>
         </form>
       </Card>
-    </main>
+    </div></main>
   );
 }

@@ -45,9 +45,9 @@ export function DonationForm({ onDonationCreated }: DonationFormProps) {
   };
 
   return (
-    <Card title="Registrar Donación" subtitle="Publica excedentes de stock para ONGs" className="h-fit">
-      {error && <div className="mb-3 text-xs text-rose-400 bg-rose-950/40 p-2 rounded">{error}</div>}
-      {success && <div role="status" className="mb-3 text-xs text-garden-sprout bg-garden-emerald/10 p-2 rounded">{success}</div>}
+    <Card title="Nueva donación" subtitle="Publica excedentes de stock para ONGs" className="h-fit">
+      {error && <div role="alert" className="notice notice-error mb-3">{error}</div>}
+      {success && <div role="status" className="notice mb-3">{success}</div>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Título del lote"
@@ -65,6 +65,8 @@ export function DonationForm({ onDonationCreated }: DonationFormProps) {
         <Input
           label="Cantidad de unidades"
           type="number"
+          min={1}
+          step={1}
           value={quantity}
           onChange={(e) => setQuantity(Number(e.target.value))}
           required

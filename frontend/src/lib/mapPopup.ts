@@ -1,26 +1,18 @@
 import type { MapPoint } from "@/lib/api";
-
+export function isDemoWarehouse(point: MapPoint): boolean {
+  return point.point_type === "acopio" && point.id === "00000000-0000-0000-0000-000000000000";
+}
 export function createMapPopupContent(point: MapPoint): HTMLElement {
-  const isAcopio = point.point_type === "acopio";
   const container = document.createElement("div");
-  container.style.cssText = "font-family: inherit; padding: 4px";
-
-  const heading = document.createElement("div");
-  heading.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px";
-
   const name = document.createElement("strong");
-  name.style.cssText = "color: #ffffff; font-size: 13px";
-  name.textContent = point.name;
-
+  name.className = "map-popup-name";
+  name.textContent = isDemoWarehouse(point) ? "Almacén demo" : point.name;
   const badge = document.createElement("span");
-  badge.style.cssText = `font-size: 9px; font-family: monospace; text-transform: uppercase; padding: 2px 6px; border-radius: 9999px; background: #060907; border: 1px solid rgba(36, 62, 49, 0.8); color: ${isAcopio ? "#34d399" : "#6ee7b7"}`;
-  badge.textContent = isAcopio ? "Almacén Central" : "Organización";
-
+  badge.className = "badge";
+  badge.textContent = point.point_type === "acopio" ? "Punto de acopio" : "Organización";
   const details = document.createElement("p");
-  details.style.cssText = "margin: 0; color: #8fa896; font-size: 11px; line-height: 1.4";
-  details.textContent = point.details;
-
-  heading.append(name, badge);
-  container.append(heading, details);
+  details.className = "map-popup-details";
+  details.textContent = isDemoWarehouse(point) ? "Punto de referencia de la demo en Veracruz. No representa tu ubicación." : point.details;
+  container.append(name, document.createElement("br"), badge, details);
   return container;
 }
