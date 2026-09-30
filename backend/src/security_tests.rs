@@ -186,15 +186,15 @@ async fn seed_veracruz_reuses_chroma_index_without_groq() {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        assert_eq!(body["ngos_seeded"], 5);
+        assert_eq!(body["ngos_seeded"], 10);
+        assert_eq!(body["companies_seeded"], 6);
         assert_eq!(body["ai_evaluations"].as_array().unwrap().len(), 0);
     }
-    let bank_id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM ngos WHERE name = 'Banco de Alimentos de Veracruz (AMBA)'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let bank_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM ngos WHERE name = 'Banco Comunitario Demo Veracruz'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let document = chroma.get_document(bank_id).await.unwrap().unwrap();
     assert!(document.contains("leche"));
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM ngos WHERE id = $1")
@@ -203,6 +203,117 @@ async fn seed_veracruz_reuses_chroma_index_without_groq() {
         .await
         .unwrap();
     assert_eq!(count, 1);
+    let donation_ids: Vec<Uuid> = (0..20)
+        .map(|i| Uuid::from_u128(0xfea00000_0000_4000_8000_000400000000 + i))
+        .collect();
+    let snapshot = sqlx::query_scalar::<_, String>(
+        "SELECT row_to_json(d)::text FROM donations d WHERE id=ANY($1) ORDER BY id",
+    )
+    .bind(&donation_ids)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(snapshot.len(), 20);
+    let log_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery_logs WHERE donation_id=ANY($1)")
+            .bind(&donation_ids)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(log_count, 12);
+    let invalid: i64 = sqlx::query_scalar("SELECT count(*) FROM donations d LEFT JOIN donation_requests r ON r.donation_id=d.id WHERE d.id=ANY($1) AND ((d.status='en_acopio' AND (r.id IS NOT NULL OR d.assigned_ngo_id IS NOT NULL)) OR (d.status<>'en_acopio' AND r.id IS NULL) OR (r.status='pendiente' AND (d.status<>'reservado' OR d.assigned_ngo_id IS NOT NULL)) OR (r.status='aprobada' AND d.assigned_ngo_id IS DISTINCT FROM r.ngo_id) OR ((d.status IN ('entregado','rechazado')) <> (d.completed_at IS NOT NULL)))")
+        .bind(&donation_ids).fetch_one(&pool).await.unwrap();
+    assert_eq!(invalid, 0);
+    // Two simultaneous loads must leave records and append-only logs unchanged.
+    let (first, second) = tokio::join!(
+        send(
+            &app,
+            "POST",
+            "/api/seed/veracruz?include_ai=false",
+            Some(&admin_token),
+            None
+        ),
+        send(
+            &app,
+            "POST",
+            "/api/seed/veracruz?include_ai=false",
+            Some(&admin_token),
+            None
+        )
+    );
+    for (status, body) in [first, second] {
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["donations_seeded"], 0);
+    }
+    let after = sqlx::query_scalar::<_, String>(
+        "SELECT row_to_json(d)::text FROM donations d WHERE id=ANY($1) ORDER BY id",
+    )
+    .bind(&donation_ids)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(snapshot, after);
+    let after_logs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery_logs WHERE donation_id=ANY($1)")
+            .bind(&donation_ids)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after_logs, log_count);
+    let owner = Uuid::from_u128(0xfea00000_0000_4000_8000_000100000000);
+    let (status, mode, matches) = matching_response(&app, donation_ids[0], owner).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(mode, "hybrid");
+    assert!(matches.as_array().unwrap().len() > 1);
+    let fallback_app = router_for_with_chroma(&pool, Some("http://127.0.0.1:1".into()));
+    let (status, mode, matches) = matching_response(&fallback_app, donation_ids[0], owner).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(mode, "lexical_fallback");
+    assert!(matches.as_array().unwrap().len() > 1);
+
+    // Force a late collision in the isolated DB: the early insert must roll back.
+    sqlx::query("DELETE FROM donations WHERE id=$1")
+        .bind(donation_ids[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE donations SET user_id=$2 WHERE id=$1")
+        .bind(donation_ids[19])
+        .bind(owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, _) = send(
+        &app,
+        "POST",
+        "/api/seed/veracruz?include_ai=false",
+        Some(&admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM donations WHERE id=$1")
+        .bind(donation_ids[0])
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0, "No partial seed survives rollback");
+    sqlx::query("UPDATE donations SET user_id=$2 WHERE id=$1")
+        .bind(donation_ids[19])
+        .bind(Uuid::from_u128(0xfea00000_0000_4000_8000_000100000002))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, body) = send(
+        &app,
+        "POST",
+        "/api/seed/veracruz?include_ai=false",
+        Some(&admin_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["donations_seeded"], 1);
 }
 
 #[tokio::test]

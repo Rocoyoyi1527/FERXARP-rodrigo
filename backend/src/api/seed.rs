@@ -52,24 +52,9 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/test-groq", get(test_groq_connection))
 }
 
-#[allow(dead_code)]
-struct CompanySeed {
-    email: &'static str,
-    name: &'static str,
-    lat: f64,
-    lon: f64,
-    donations: Vec<(&'static str, &'static str, i32)>,
-}
+mod data;
 
-struct NgoSeed {
-    email: &'static str,
-    name: &'static str,
-    needs: &'static str,
-    lat: f64,
-    lon: f64,
-}
-
-// POST /api/seed/veracruz - Ingesta idempotente con evaluación DeepSeek-R1
+// POST /api/seed/veracruz — fixtures ficticios; nunca descubre organizaciones.
 async fn seed_veracruz_data(
     claims: Claims,
     Query(options): Query<SeedOptions>,
@@ -77,263 +62,97 @@ async fn seed_veracruz_data(
 ) -> Result<Json<SeedResponse>, (StatusCode, String)> {
     require_role(&claims, Role::Admin)?;
     let seed_password = state.seed_password.as_deref().ok_or_else(internal_error)?;
-    let default_password = hash(seed_password, DEFAULT_COST).map_err(|_| internal_error())?;
+    let password_hash = hash(seed_password, DEFAULT_COST).map_err(|_| internal_error())?;
     let chroma = state
         .chroma_url
         .as_deref()
-        .ok_or(())
-        .and_then(|url| ChromaClient::new(url).map_err(|_| ()))
-        .map_err(|_| {
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "ChromaDB no está configurada".to_string(),
-            )
-        })?;
+        .and_then(|url| ChromaClient::new(url).ok())
+        .ok_or((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ChromaDB no está configurada".into(),
+        ))?;
     chroma.health().await.map_err(|_| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            "ChromaDB no está disponible".to_string(),
+            "ChromaDB no está disponible".into(),
         )
     })?;
 
-    let companies = vec![
-        CompanySeed {
-            email: "donaciones@chedraui-americas.com",
-            name: "Chedraui Las Américas (Boca del Río)",
-            lat: 19.1417,
-            lon: -96.1042,
-            donations: vec![
-                (
-                    "80 Cajas de Leche Entera",
-                    "Lácteos pasteurizados sellados con 20 días de vigencia para consumo",
-                    80,
-                ),
-                (
-                    "120 Paquetes de Abarrotes y Harinas",
-                    "Bolsas de harina de trigo, arroz y frijol negro empaquetados",
-                    120,
-                ),
-                (
-                    "50 Cajas de Manzanas y Verduras",
-                    "Fruta de temporada fresca en cajas de madera aptas para consumo inmediato",
-                    50,
-                ),
-            ],
-        },
-        CompanySeed {
-            email: "sustentabilidad@tenaristamsa.com",
-            name: "TenarisTamsa (Parque Industrial Tejería)",
-            lat: 19.1764,
-            lon: -96.2238,
-            donations: vec![
-                (
-                    "15 Laptops y Servidores Dell",
-                    "Equipo de cómputo funcional retirado por ciclo de renovación interna",
-                    15,
-                ),
-                (
-                    "40 Escritorios y Sillas de Oficina",
-                    "Mobiliario ergonómico en óptimo estado para aulas o administración",
-                    40,
-                ),
-            ],
-        },
-        CompanySeed {
-            email: "contacto@cafiver.com",
-            name: "Cafiver Veracruz",
-            lat: 19.1650,
-            lon: -96.1400,
-            donations: vec![(
-                "200 Frascos de Café Soluble",
-                "Café procesado en frascos herméticos de 200g listos para despensas",
-                200,
-            )],
-        },
-    ];
-
-    let ngos = vec![
-        NgoSeed {
-            email: "direccion@bancodealimentosveracruz.org",
-            name: "Banco de Alimentos de Veracruz (AMBA)",
-            needs: "Alimentos perecederos y no perecederos, granos básicos, arroz, frijol, leche, lácteos y fórmulas infantiles para comedores.",
-            lat: 19.1834,
-            lon: -96.1550,
-        },
-        NgoSeed {
-            email: "asistencia@caritasveracruz.org",
-            name: "Cáritas Diocesana de Veracruz",
-            needs: "Medicamentos de cuadro básico, ropa en buen estado, calzado, cobijas y artículos de higiene personal familiar.",
-            lat: 19.1982,
-            lon: -96.1384,
-        },
-        NgoSeed {
-            email: "ayuda@alberguelaesperanza.org",
-            name: "Albergue Nocturno La Esperanza",
-            needs: "Colchones, sábanas, cobijas abrigadoras, insumos de limpieza industrial y alimentos para cenas calientes.",
-            lat: 19.1712,
-            lon: -96.1310,
-        },
-        NgoSeed {
-            email: "educacion@casadelninozamora.org",
-            name: "Casa del Niño Manuel Gutiérrez Zamora",
-            needs: "Material educativo, computadoras para estudio, calzado para menores, mochilas escolares y leche fortificada.",
-            lat: 19.1905,
-            lon: -96.1265,
-        },
-        NgoSeed {
-            email: "atencion@asilosanantonio.org",
-            name: "Asilo de Ancianos San Antonio de Padua",
-            needs: "Pañales para adulto mayor, suplementos geriátricos, productos desinfectantes y leche deslactosada.",
-            lat: 19.1880,
-            lon: -96.1360,
-        },
-    ];
-
-    let mut seeded_donations_count = 0;
-    let mut all_created_donations = Vec::new();
-
-    // 1. Sembrado de Empresas y Donaciones
-    for comp in &companies {
-        let user_row = sqlx::query!(
-            r#"
-            INSERT INTO users (email, password_hash, role)
-            VALUES ($1, $2, 'empresa')
-            ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-            RETURNING id
-            "#,
-            comp.email,
-            default_password
-        )
-        .fetch_one(&state.db)
+    // A transaction-scoped lock also serializes simultaneous Admin invocations.
+    let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
+    sqlx::query("SELECT pg_advisory_xact_lock(70620260929)")
+        .execute(&mut *tx)
         .await
         .map_err(|_| internal_error())?;
-
-        for (title, desc, qty) in &comp.donations {
-            let existing_don = sqlx::query!(
-                "SELECT id FROM donations WHERE user_id = $1 AND title = $2",
-                user_row.id,
-                title
-            )
-            .fetch_optional(&state.db)
+    let mut created = 0;
+    for (i, email) in data::COMPANIES.iter().enumerate() {
+        ensure_demo_user(&mut tx, demo_id(1, i), email, "empresa", &password_hash).await?;
+    }
+    for (i, ngo) in data::NGOS.iter().enumerate() {
+        let user_id = demo_id(2, i);
+        ensure_demo_user(&mut tx, user_id, ngo.email, "ong", &password_hash).await?;
+        sqlx::query("INSERT INTO ngos (id, user_id, name, needs_description, latitude, longitude, is_verified) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING")
+            .bind(demo_id(3, i)).bind(user_id).bind(ngo.name)
+            .bind(format!("DEMO FICTICIA · coordenadas aproximadas y verificación simulada, sin vínculo con organizaciones reales. {}", ngo.needs))
+            .bind(ngo.lat).bind(ngo.lon).bind(i < 9)
+            .execute(&mut *tx).await.map_err(|_| internal_error())?;
+        let owner: Uuid = sqlx::query_scalar("SELECT user_id FROM ngos WHERE id=$1")
+            .bind(demo_id(3, i))
+            .fetch_one(&mut *tx)
             .await
-            .unwrap_or(None);
-
-            let don_id = if let Some(d) = existing_don {
-                d.id
-            } else {
-                let new_id = Uuid::new_v4();
-                let _ = sqlx::query!(
-                    r#"
-                    INSERT INTO donations (id, user_id, title, description, quantity, status)
-                    VALUES ($1, $2, $3, $4, $5, 'en_acopio')
-                    "#,
-                    new_id,
-                    user_row.id,
-                    title,
-                    desc,
-                    qty
-                )
-                .execute(&state.db)
-                .await;
-                seeded_donations_count += 1;
-                new_id
-            };
-
-            all_created_donations.push((don_id, title.to_string(), desc.to_string()));
+            .map_err(|_| internal_error())?;
+        if owner != user_id {
+            return Err(seed_collision());
         }
     }
+    for (i, donation) in data::DONATIONS.iter().enumerate() {
+        created += insert_demo_donation(&mut tx, i, donation).await?;
+    }
+    tx.commit().await.map_err(|_| internal_error())?;
 
-    // 2. Sembrado de ONGs e Indexación Vectorial
+    // PostgreSQL has committed; index errors are recoverable using reindex_chroma.
     let mut ngos_list = Vec::new();
-
-    for ngo in &ngos {
-        let user_row = sqlx::query!(
-            r#"
-            INSERT INTO users (email, password_hash, role)
-            VALUES ($1, $2, 'ong')
-            ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-            RETURNING id
-            "#,
-            ngo.email,
-            default_password
+    for (i, ngo) in data::NGOS.iter().enumerate() {
+        let record = sqlx::query_as::<_, NgoIndexRecord>(
+            "SELECT id, name, needs_description FROM ngos WHERE id=$1",
         )
+        .bind(demo_id(3, i))
         .fetch_one(&state.db)
         .await
         .map_err(|_| internal_error())?;
-
-        let ngo_row = sqlx::query!("SELECT id FROM ngos WHERE user_id = $1", user_row.id)
-            .fetch_optional(&state.db)
-            .await
-            .unwrap_or(None);
-
-        let final_ngo_id = if let Some(rec) = ngo_row {
-            let _ = sqlx::query!(
-                r#"
-                UPDATE ngos 
-                SET name = $1, needs_description = $2, latitude = $3, longitude = $4
-                WHERE id = $5
-                "#,
-                ngo.name,
-                ngo.needs,
-                ngo.lat,
-                ngo.lon,
-                rec.id
-            )
-            .execute(&state.db)
-            .await
-            .map_err(|_| internal_error())?;
-            rec.id
-        } else {
-            let new_id = Uuid::new_v4();
-            let _ = sqlx::query!(
-                r#"
-                INSERT INTO ngos (id, user_id, name, needs_description, latitude, longitude, is_verified)
-                VALUES ($1, $2, $3, $4, $5, $6, false)
-                "#,
-                new_id,
-                user_row.id,
-                ngo.name,
-                ngo.needs,
-                ngo.lat,
-                ngo.lon
-            )
-            .execute(&state.db)
-            .await
-            .map_err(|_| internal_error())?;
-            new_id
-        };
-
-        let indexed_ngo = sqlx::query_as::<_, NgoIndexRecord>(
-            "SELECT id, name, needs_description FROM ngos WHERE id = $1",
-        )
-        .bind(final_ngo_id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| internal_error())?;
-
-        upsert_ngo(&chroma, &indexed_ngo).await.map_err(|_| {
+        upsert_ngo(&chroma, &record).await.map_err(|_| {
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                "No se pudo indexar la ONG en ChromaDB; ejecute reindex_chroma".to_string(),
+                "Datos demo guardados; ejecute reindex_chroma para completar el índice".into(),
             )
         })?;
         ngos_list.push((
-            final_ngo_id,
-            ngo.name.to_string(),
-            ngo.needs.to_string(),
+            record.id,
+            record.name,
+            record.needs_description.unwrap_or_default(),
             ngo.lat,
             ngo.lon,
         ));
     }
-
-    // 3. Puntuación automática con DeepSeek-R1 (Groq)
+    let all_created_donations: Vec<_> = data::DONATIONS
+        .iter()
+        .enumerate()
+        .map(|(i, d)| {
+            (
+                demo_id(4, i),
+                d.title.to_string(),
+                d.description.to_string(),
+            )
+        })
+        .collect();
+    // Enriquecimiento opcional; no se invoca durante la demo por defecto.
     let groq = GroqClient::new();
     let mut ai_evaluations = Vec::new();
 
     for (_don_id, title, desc) in
         all_created_donations
             .iter()
-            .take(if options.include_ai.unwrap_or(true) {
+            .take(if options.include_ai.unwrap_or(false) {
                 4
             } else {
                 0
@@ -365,10 +184,10 @@ async fn seed_veracruz_data(
     }
 
     Ok(Json(SeedResponse {
-        message: "Ecosistema poblado e indexado en ChromaDB; Groq es opcional.".to_string(),
-        companies_seeded: companies.len(),
-        ngos_seeded: ngos.len(),
-        donations_seeded: seeded_donations_count,
+        message: "Dataset ficticio demo preparado e indexado. Los registros existentes se conservan; Groq es opcional.".to_string(),
+        companies_seeded: data::COMPANIES.len(),
+        ngos_seeded: data::NGOS.len(),
+        donations_seeded: created,
         ai_evaluations,
     }))
 }
@@ -385,7 +204,7 @@ async fn test_groq_connection(
         .evaluate_fit(
             "80 Cajas de Leche Entera",
             "Lácteos pasteurizados con 20 días de vigencia",
-            "Banco de Alimentos de Veracruz (AMBA)",
+            "Banco Comunitario Demo Veracruz",
             "Demanda crítica de leche, lácteos y fórmulas infantiles para comedores comunitarios",
             2.4,
         )
@@ -402,4 +221,133 @@ async fn test_groq_connection(
         }))),
         None => Err(internal_error()),
     }
+}
+
+// Stable fixture namespace. It never adopts existing accounts by email or name.
+fn demo_id(kind: u128, index: usize) -> Uuid {
+    Uuid::from_u128(0xfea00000_0000_4000_8000_000000000000 | (kind << 32) | index as u128)
+}
+
+fn seed_collision() -> (StatusCode, String) {
+    (
+        StatusCode::CONFLICT,
+        "Identidad demo en conflicto; no se modificaron datos existentes".into(),
+    )
+}
+
+async fn ensure_demo_user(
+    db: &mut sqlx::PgConnection,
+    id: Uuid,
+    email: &str,
+    role: &str,
+    password: &str,
+) -> Result<(), (StatusCode, String)> {
+    sqlx::query("INSERT INTO users(id,email,password_hash,role) VALUES ($1,$2,$3,$4::text::user_role) ON CONFLICT (id) DO NOTHING")
+        .bind(id).bind(email).bind(password).bind(role)
+        .execute(&mut *db).await.map_err(|_| seed_collision())?;
+    let actual: (String, String) = sqlx::query_as("SELECT email,role::text FROM users WHERE id=$1")
+        .bind(id)
+        .fetch_one(&mut *db)
+        .await
+        .map_err(|_| internal_error())?;
+    if actual != (email.to_owned(), role.to_owned()) {
+        return Err(seed_collision());
+    }
+    Ok(())
+}
+
+async fn insert_demo_donation(
+    db: &mut sqlx::PgConnection,
+    index: usize,
+    donation: &data::DonationSeed,
+) -> Result<usize, (StatusCode, String)> {
+    use crate::models::donation_state::{DonationState, PhysicalAction};
+    let id = demo_id(4, index);
+    let company = demo_id(1, donation.company);
+    let ngo = demo_id(3, donation.ngo);
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT user_id FROM donations WHERE id=$1")
+        .bind(id)
+        .fetch_optional(&mut *db)
+        .await
+        .map_err(|_| internal_error())?;
+    if let Some(owner) = existing {
+        if owner != company {
+            return Err(seed_collision());
+        }
+        // Preserve rehearsed lifecycle, names, verification and passwords on reruns.
+        return Ok(0);
+    }
+    if donation.status != "en_acopio" {
+        let verified: bool = sqlx::query_scalar("SELECT is_verified FROM ngos WHERE id=$1")
+            .bind(ngo)
+            .fetch_one(&mut *db)
+            .await
+            .map_err(|_| internal_error())?;
+        if !verified {
+            return Err((
+                StatusCode::CONFLICT,
+                "El fixture requiere una ONG demo verificada; no se revierte una revocación".into(),
+            ));
+        }
+    }
+    sqlx::query("INSERT INTO donations(id,user_id,title,description,quantity,status) VALUES ($1,$2,$3,$4,$5,'en_acopio')")
+        .bind(id).bind(company).bind(donation.title)
+        .bind(format!("DEMO FICTICIA · no acredita operaciones ni impacto real. {}", donation.description)).bind(donation.quantity)
+        .execute(&mut *db).await.map_err(|_| internal_error())?;
+    if donation.status == "en_acopio" {
+        return Ok(1);
+    }
+    sqlx::query("INSERT INTO donation_requests(id,donation_id,ngo_id,status) VALUES ($1,$2,$3,$4)")
+        .bind(demo_id(5, index))
+        .bind(id)
+        .bind(ngo)
+        .bind(if donation.approved {
+            "aprobada"
+        } else {
+            "pendiente"
+        })
+        .execute(&mut *db)
+        .await
+        .map_err(|_| internal_error())?;
+    sqlx::query("UPDATE donations SET status='reservado', assigned_ngo_id=$2 WHERE id=$1")
+        .bind(id)
+        .bind(donation.approved.then_some(ngo))
+        .execute(&mut *db)
+        .await
+        .map_err(|_| internal_error())?;
+    let mut status = DonationState::Reservado;
+    let actions: &[PhysicalAction] = match donation.status {
+        "reservado" => &[],
+        "en_transito" => &[PhysicalAction::Salida],
+        "entregado" => &[PhysicalAction::Salida, PhysicalAction::Entrega],
+        "rechazado" => &[PhysicalAction::Salida, PhysicalAction::Rechazo],
+        _ => return Err(internal_error()),
+    };
+    if !actions.is_empty() && !donation.approved {
+        return Err(internal_error());
+    }
+    for (step, action) in actions.iter().enumerate() {
+        let next = status
+            .after_physical_action(*action)
+            .ok_or_else(internal_error)?;
+        let action_name = match action {
+            PhysicalAction::Salida => "salida",
+            PhysicalAction::Entrega => "entrega",
+            PhysicalAction::Rechazo => "rechazo",
+            _ => return Err(internal_error()),
+        };
+        let note = if next == DonationState::Rechazado {
+            "DEMO FICTICIA · rechazo simulado por embalaje dañado o piezas faltantes."
+        } else {
+            "DEMO FICTICIA · transición simulada para exposición; no es una entrega real."
+        };
+        sqlx::query("UPDATE donations SET status=$2, completed_at=CASE WHEN $2 IN ('entregado','rechazado') THEN now() ELSE NULL END, rejection_reason=$3 WHERE id=$1")
+            .bind(id).bind(next.as_str()).bind((next == DonationState::Rechazado).then_some(note))
+            .execute(&mut *db).await.map_err(|_| internal_error())?;
+        sqlx::query("INSERT INTO delivery_logs(id,donation_id,action,previous_status,new_status,notes) VALUES ($1,$2,$3,$4,$5,$6)")
+            .bind(demo_id(6, index * 2 + step)).bind(id).bind(action_name).bind(status.as_str()).bind(next.as_str()).bind(note)
+            .execute(&mut *db).await.map_err(|_| internal_error())?;
+        status = next;
+    }
+    Ok(1)
 }

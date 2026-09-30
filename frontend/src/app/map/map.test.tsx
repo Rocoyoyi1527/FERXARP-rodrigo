@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "@/lib/api";
 import MapPage from "./page";
 import * as L from "leaflet";
@@ -6,7 +6,7 @@ const router = { push: jest.fn() };
 jest.mock("next/navigation", () => ({ useRouter: () => router }));
 jest.mock("@/components/dashboard/Navbar", () => ({ Navbar: () => <nav>Mapa</nav> }));
 jest.mock("leaflet", () => {
- const map = { setView: jest.fn().mockReturnThis(), remove: jest.fn() };
+ const map = { setView: jest.fn().mockReturnThis(), fitBounds: jest.fn().mockReturnThis(), remove: jest.fn() };
  return { map: jest.fn(()=>map), control: { zoom: jest.fn(()=>({addTo:jest.fn()})) }, tileLayer: jest.fn(()=>({addTo:jest.fn()})), divIcon: jest.fn(options=>options), marker:jest.fn(()=>({addTo:jest.fn().mockReturnThis(),bindPopup:jest.fn().mockReturnThis(),remove:jest.fn()})),polyline:jest.fn(()=>({addTo:jest.fn()})) };
 });
 const geolocation = { getCurrentPosition: jest.fn() };
@@ -36,4 +36,20 @@ test("sin API geolocation no se inventa un marcador",async()=>{
  render(<MapPage/>);
  expect(await screen.findByText("No se pudo obtener tu ubicación.")).toBeInTheDocument();
  expect(L.marker).toHaveBeenCalledTimes(1);
+});
+
+test("encuadra todas las ONG registradas, incluidas las de Medellín, sin inventar ubicación",async()=>{
+ geolocation.getCurrentPosition.mockImplementation((_ok,fail)=>fail({code:1}));
+ jest.spyOn(api,"getMapPoints").mockResolvedValue([
+  {id:"00000000-0000-0000-0000-000000000000",name:"Almacén demo",point_type:"acopio",latitude:19.1738,longitude:-96.1342,details:"Demo"},
+  {id:"medellin",name:"Refugio Demo Medellín",point_type:"ong",latitude:19.066,longitude:-96.157,details:"Demo"},
+  {id:"invalid",name:"Coordenadas inválidas",point_type:"ong",latitude:999,longitude:-96,details:"Demo"},
+ ]);
+ render(<MapPage/>);
+ await screen.findByText("No se pudo obtener tu ubicación.");
+ const map = jest.mocked(L.map).mock.results[0].value;
+ expect(map.fitBounds).toHaveBeenCalledWith([[19.1738,-96.1342],[19.066,-96.157]],{padding:[36,36],maxZoom:12,animate:false});
+ expect(L.marker).toHaveBeenCalledTimes(2);
+ fireEvent.click(screen.getByRole("button",{name:"Ver Veracruz"}));
+ expect(map.fitBounds).toHaveBeenCalledTimes(2);
 });

@@ -23,6 +23,13 @@ export default function MapPage() {
  const [position,setPosition]=useState<UserPosition|null>(null);
  const [locationStatus,setLocationStatus]=useState("Tu ubicación se solicita al navegador; puedes rechazar el permiso.");
  const [locating,setLocating]=useState(false);
+ const showReference=useCallback(()=>{
+  const coordinates: [number,number][] = points
+   .filter(p=>Number.isFinite(p.latitude)&&Number.isFinite(p.longitude)&&Math.abs(p.latitude)<=90&&Math.abs(p.longitude)<=180)
+   .map(p=>[p.latitude,p.longitude]);
+  if(coordinates.length>1)mapRef.current?.fitBounds(coordinates,{padding:[36,36],maxZoom:12,animate:false});
+  else mapRef.current?.setView(REFERENCE,12);
+ },[points]);
  const locate=useCallback(async()=>{
   setLocating(true);
   try { const coords=await requestUserPosition();if(mounted.current){setPosition(coords);setLocationStatus("Tu ubicación fue obtenida por el navegador.");} }
@@ -52,11 +59,12 @@ export default function MapPage() {
     marker.bindPopup(createMapPopupContent(p),{className:"custom-popup"});
     if(!warehouse&&acopio)L.polyline([[acopio.latitude,acopio.longitude],[p.latitude,p.longitude]],{color:"#16a34a",weight:2,opacity:.35,dashArray:"5,8"}).addTo(map);
    });
+   showReference();
    setReady(true);
    void locate();
   }).catch(()=>{if(active)setError("No se pudo cargar el mapa. Recarga la página para intentarlo de nuevo.");});
   return()=>{active=false;mapRef.current?.remove();mapRef.current=null;locationMarker.current=null;};
- },[loading,points,locate]);
+ },[loading,points,locate,showReference]);
  useEffect(()=>{
   if(!ready)return;
   let active=true;
@@ -69,7 +77,7 @@ export default function MapPage() {
   });
   return()=>{active=false;};
  },[position,ready]);
- return <main className="app-page"><Navbar user={user} activePage="map" onLogout={()=>{localStorage.removeItem("fexarp_token");router.push("/login");}}/><div className="page-content"><header className="page-heading"><div><p className="eyebrow">Cerca de tu comunidad</p><h1>Mapa de organizaciones</h1><p>Vista de referencia: Veracruz. Los puntos corresponden a las coordenadas registradas en la plataforma.</p></div><div className="flex flex-wrap gap-2"><button disabled={!ready||locating} className="btn btn-primary" onClick={()=>void locate()}><Icon name="location"/>{locating?"Obteniendo ubicación...":"Usar mi ubicación"}</button><button disabled={!ready} className="btn btn-secondary" onClick={()=>mapRef.current?.setView(REFERENCE,12)}>Ver Veracruz</button></div></header>
+ return <main className="app-page"><Navbar user={user} activePage="map" onLogout={()=>{localStorage.removeItem("fexarp_token");router.push("/login");}}/><div className="page-content"><header className="page-heading"><div><p className="eyebrow">Cerca de tu comunidad</p><h1>Mapa de organizaciones</h1><p>Vista de referencia: Veracruz. Los puntos corresponden a las coordenadas registradas en la plataforma.</p></div><div className="flex flex-wrap gap-2"><button disabled={!ready||locating} className="btn btn-primary" onClick={()=>void locate()}><Icon name="location"/>{locating?"Obteniendo ubicación...":"Usar mi ubicación"}</button><button disabled={!ready} className="btn btn-secondary" onClick={showReference}>Ver Veracruz</button></div></header>
  {error && <p role="alert" className="notice notice-error">{error}</p>}
  <p role="status" className="text-sm text-garden-sage">{locationStatus}</p>
  <div className="map-summary"><span><strong>{points.filter(p=>p.point_type==="acopio").length}</strong> almacenes</span><span><strong>{points.filter(p=>p.point_type==="ong").length}</strong> ONG</span><span><strong>{activeShipments??"No disponible"}</strong> envíos activos visibles para tu cuenta</span></div>

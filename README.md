@@ -45,7 +45,7 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
 
 4. Desde `backend/`, ejecuta `cargo check --locked`, `cargo run --locked` y `cargo test --locked`. Verifica `http://localhost:8000/health` cuando el backend esté en ejecución. Los tests de autorización crean automáticamente la base local `ferxarp_security_test` y aplican sus migraciones; el usuario de PostgreSQL debe poder crear bases de datos.
 
-El seed de demostración requiere un JWT de Admin y `FERXARP_SEED_PASSWORD` en `backend/.env`. Configura una contraseña local propia antes de invocarlo; las ONG sembradas empiezan sin verificar. Para poblar e indexar sin enriquecimiento Groq, usa `POST /api/seed/veracruz?include_ai=false`.
+El seed de demostración requiere un JWT de Admin y `FERXARP_SEED_PASSWORD` en `backend/.env`. Configura una contraseña local propia antes de invocarlo; se crean 10 ONG, 6 empresas y 20 donaciones ficticias. Nueve ONG demo incluyen verificación simulada y una queda pendiente; esto no acredita organizaciones reales. Los nombres, correos `.invalid`, descripciones y logs identifican el dataset demo. Repetir la carga conserva estados, verificaciones y contraseñas existentes. Groq queda desactivado por defecto. Para poblar e indexar explícitamente sin enriquecimiento Groq, usa `POST /api/seed/veracruz?include_ai=false`.
 
 ## ChromaDB y matching local
 
@@ -169,3 +169,5 @@ FERXARP/
 │   └── package.json
 ├── documentacion.md          # Documento formal del sistema
 └── README.md
+
+Dataset y auditoría del supuesto scraper: [FERXARP-DEMO-DATA](docs/entrega/ferxarp-demo-data.md).
