@@ -32,7 +32,7 @@ export function Navbar({ user, onLogout, activePage = "dashboard" }: { user: Use
   </nav>
  </header>
  {error && <p role="alert" className="notice notice-error page-content mt-4">{error}</p>}
- {confirm && <Modal title="Cargar datos de demostración" onClose={()=>setConfirm(false)}><p className="text-sm text-garden-sage mb-5">Se crearán o actualizarán las empresas, organizaciones y donaciones de demostración configuradas en el servidor.</p><div className="flex justify-end gap-2"><button className="btn btn-secondary" onClick={()=>setConfirm(false)}>Cancelar</button><button className="btn btn-primary" onClick={()=>void seed()}>Confirmar carga</button></div></Modal>}
+ {confirm && <Modal title="Cargar datos de demostración" onClose={()=>setConfirm(false)}><p className="text-sm text-garden-sage mb-5">Se crearán o actualizarán datos ficticios para demostración. Los registros existentes se conservan.</p><div className="flex justify-end gap-2"><button className="btn btn-secondary" onClick={()=>setConfirm(false)}>Cancelar</button><button className="btn btn-primary" onClick={()=>void seed()}>Confirmar carga</button></div></Modal>}
  {result && <Modal title="Datos de demostración preparados" onClose={()=>setResult(null)}><p className="notice">{result.companies_seeded} empresas · {result.ngos_seeded} ONG · {result.donations_seeded} donaciones</p>{result.ai_evaluations?.map((item,i)=><p className="text-sm mt-3" key={i}>{item.donation_title} → {item.recommended_ngo}: {item.reasoning}</p>)}<button className="btn btn-primary mt-5" onClick={()=>window.location.reload()}>Actualizar vista</button></Modal>}
  </>;
 }

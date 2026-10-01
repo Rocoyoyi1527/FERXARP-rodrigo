@@ -1,4 +1,6 @@
 "use client";
+import { DemoNotice } from "@/components/ui/DemoNotice";
+import { isDemoDonation } from "@/lib/demo";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, apiErrorMessage, isApiError, type DonationItem, type ScoredMatch, type ShipmentItem, type UserClaims } from "@/lib/api";
@@ -47,6 +49,7 @@ export default function DashboardPage() {
  return <main className="app-page"><Navbar user={user} onLogout={logout}/><div className="page-content"><header className="page-heading"><div><p className="eyebrow">Tu red, en movimiento</p><h1>{user ? titles[user.role] : "Inicio"}</h1><p>Gestiona tus actividades y acompaña cada entrega, de principio a fin.</p></div>{user?.role === "empresa" && <a href="#nueva-donacion" className="btn btn-primary"><Icon name="plus"/>Nueva donación</a>}{user?.role === "ong" && <a href="#donaciones" className="btn btn-primary">Explorar donaciones</a>}</header>
  {error && <p role="alert" className="notice notice-error mb-5">{error}</p>}
  {user?.role === "ceo" ? <CeoMetrics/> : user?.role === "admin" ? <AdminAudit/> : user?.role === "ong" ? <OngCanopy/> : user?.role === "empresa" ? <>
+ {donations.some(d => isDemoDonation(d.id)) && <DemoNotice/>}
  <StatCards items={[{label:"Donaciones activas",value:donations.filter(d=>["en_acopio","reservado","en_transito"].includes(d.status)).length,icon:"box"},{label:"Solicitudes pendientes",value:shipments.filter(s=>s.donation_status==="reservado"&&s.request_status==="pendiente").length,icon:"users"},{label:"Listas para salida",value:shipments.filter(s=>s.donation_status==="reservado"&&s.request_status==="aprobada").length,icon:"truck"},{label:"Entregadas",value:donations.filter(d=>d.status==="entregado").length,icon:"check"}]}/>
  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start"><div id="nueva-donacion"><DonationForm onDonationCreated={refresh}/></div><div className="lg:col-span-2"><DonationList donations={donations} onSelectMatching={select}/></div></div><div className="mt-6"><GardenGraph donation={selected} matches={matches} isLoading={matching}/></div>
  </> : null}</div></main>;

@@ -1,0 +1,53 @@
+archivo	linea	clasificacion	motivo	coincidencia
+docs/entrega/ferxarp-demo-data.md	41	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	- Nombres ONG y títulos incluyen **Demo**; descripciones y logs declaran **DEMO FICTICIA**. Correos exclusivamente `@demo.ferxarp.invalid`; ninguna entidad afirma ser cliente o contraparte real.
+docs/entrega/ferxarp-demo-data.md	60	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	- Empresa: `alimentos-veracruz@demo.ferxarp.invalid`.
+docs/entrega/ferxarp-demo-data.md	61	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	- ONG: `banco-veracruz@demo.ferxarp.invalid`.
+docs/entrega/ferxarp-demo-data.md	62	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	- ONG pendiente para verificación: `comunidad-centro@demo.ferxarp.invalid`.
+docs/entrega/ferxarp-demo-data.md	87	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	Los registros son material de demostración. Los indicadores CEO calculados sobre ellos siguen siendo estimaciones sobre datos ficticios, no resultados de operación o impacto real.
+README.md	11	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	  * Motor de emparejamiento híbrido: similitud vectorial (ChromaDB) + fórmula geodésica (Haversine) + análisis cognitivo vía Groq AI (`deepseek-r1-distill-llama-70b`).
+README.md	19	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	    * **CEO:** Estimaciones de volumen, beneficiarios y $\text{CO}_2\text{e}$; metodología pendiente de validación. Los datos Demo son ficticios y no acreditan impacto.
+README.md	33	CORRECTA	Documentación de datos ficticios, estimaciones o configuración existente.	| **Inteligencia Artificial** | Groq LPU (DeepSeek-R1 Distill Llama 70B) + Embeddings Cosine |
+frontend/pnpm-lock.yaml	1577	CORRECTA	Coincidencia incidental en integridad de dependencia; no es texto UI.	    resolution: {integrity: sha512-BS8PfmtDGnrgYdOonGZQdLZslWIeCGFP9tpan0hi1Co2Zr2NKADsvGYA8XxuG/4UWgJ6Cjtv+YJnB6MM69QGlQ==}
+backend/src/api/metrics.rs	14	CORRECTA	Campo de estimación o fórmula existente; UI declara metodología pendiente y datos ficticios.	    pub estimated_co2_saved_kg: f64,
+backend/src/api/metrics.rs	61	CORRECTA	Campo de estimación o fórmula existente; UI declara metodología pendiente y datos ficticios.	    // Factor de mitigación ambiental: ~2.5 kg de CO2eq evitados por cada kg de residuo recuperado
+backend/src/api/metrics.rs	62	CORRECTA	Campo de estimación o fórmula existente; UI declara metodología pendiente y datos ficticios.	    let co2_saved = (delivered_volume as f64) * 2.5;
+backend/src/api/metrics.rs	72	CORRECTA	Campo de estimación o fórmula existente; UI declara metodología pendiente y datos ficticios.	        estimated_co2_saved_kg: co2_saved,
+backend/src/api/seed/data.rs	11	CORRECTA	Correo reservado del fixture ficticio.	"    ""alimentos-veracruz@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	12	CORRECTA	Correo reservado del fixture ficticio.	"    ""tecnologia-boca@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	13	CORRECTA	Correo reservado del fixture ficticio.	"    ""mobiliario-centro@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	14	CORRECTA	Correo reservado del fixture ficticio.	"    ""suministros-medellin@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	15	CORRECTA	Correo reservado del fixture ficticio.	"    ""herramientas-puerto@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	16	CORRECTA	Correo reservado del fixture ficticio.	"    ""textiles-veracruz@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	21	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""banco-veracruz@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	28	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""educacion-boca@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	35	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""comedor-centro@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	42	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""refugio-medellin@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	49	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""ambiente-puerto@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	56	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""aula-veracruz@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	63	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""red-boca@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	70	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""taller-medellin@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	77	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""centro-puerto@demo.ferxarp.invalid"","
+backend/src/api/seed/data.rs	84	CORRECTA	Correo reservado del fixture ficticio.	"        email: ""comunidad-centro@demo.ferxarp.invalid"","
+backend/src/api/donations.rs	295	CORRECTA	Referencia al modelo efectivamente configurado; no se cambió ni se llamó Groq.	    // 3. Puntuación y razonamiento con DeepSeek-R1 (Groq)
+backend/src/api/seed.rs	96	CORRECTA	Evidencia almacenada de simulación o diagnóstico del modelo configurado; no se repite en tarjetas.	"            .bind(format!(""DEMO FICTICIA · coordenadas aproximadas y verificación simulada, sin vínculo con organizaciones reales. {}"", ngo.needs))"
+backend/src/api/seed.rs	195	CORRECTA	Evidencia almacenada de simulación o diagnóstico del modelo configurado; no se repite en tarjetas.	// GET /api/seed/test-groq - Diagnóstico directo de DeepSeek-R1
+backend/src/api/seed.rs	218	CORRECTA	Evidencia almacenada de simulación o diagnóstico del modelo configurado; no se repite en tarjetas.	"            ""model"": ""deepseek-r1-distill-llama-70b"","
+backend/src/api/seed.rs	295	CORRECTA	Evidencia almacenada de simulación o diagnóstico del modelo configurado; no se repite en tarjetas.	"        .bind(format!(""DEMO FICTICIA · no acredita operaciones ni impacto real. {}"", donation.description)).bind(donation.quantity)"
+backend/src/api/seed.rs	340	CORRECTA	Evidencia almacenada de simulación o diagnóstico del modelo configurado; no se repite en tarjetas.	"            ""DEMO FICTICIA · rechazo simulado por embalaje dañado o piezas faltantes."""
+backend/src/api/seed.rs	342	CORRECTA	Evidencia almacenada de simulación o diagnóstico del modelo configurado; no se repite en tarjetas.	"            ""DEMO FICTICIA · transición simulada para exposición; no es una entrega real."""
+frontend/src/lib/demo.test.ts	7	CORRECTA	Regresión: protege contenido histórico y reconocimiento exacto del seed.	"const disclaimer = ""DEMO FICTICIA · no acredita operaciones ni impacto real. "";"
+frontend/src/lib/demo.test.ts	18	CORRECTA	Regresión: protege contenido histórico y reconocimiento exacto del seed.	"  const email = ""alimentos-veracruz@demo.ferxarp.invalid"";"
+frontend/src/lib/demo.test.ts	25	CORRECTA	Regresión: protege contenido histórico y reconocimiento exacto del seed.	"  const text = ""DEMO FICTICIA · coordenadas aproximadas y verificación simulada, sin vínculo con organizaciones reales. Alimentos."";"
+frontend/src/lib/api.ts	116	CORRECTA	Campo de estimación o fórmula existente; UI declara metodología pendiente y datos ficticios.	  estimated_co2_saved_kg: number;
+frontend/src/lib/demo.ts	14	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"  ""alimentos-veracruz@demo.ferxarp.invalid"": ""Alimentos Veracruz Demo"","
+frontend/src/lib/demo.ts	15	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"  ""tecnologia-boca@demo.ferxarp.invalid"": ""Tecnología Boca Demo"","
+frontend/src/lib/demo.ts	16	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"  ""mobiliario-centro@demo.ferxarp.invalid"": ""Mobiliario Centro Demo"","
+frontend/src/lib/demo.ts	17	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"  ""suministros-medellin@demo.ferxarp.invalid"": ""Suministros Medellín Demo"","
+frontend/src/lib/demo.ts	18	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"  ""herramientas-puerto@demo.ferxarp.invalid"": ""Herramientas Puerto Demo"","
+frontend/src/lib/demo.ts	19	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"  ""textiles-veracruz@demo.ferxarp.invalid"": ""Textiles Veracruz Demo"","
+frontend/src/lib/demo.ts	29	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"    ? text?.replace(/^DEMO FICTICIA · no acredita operaciones ni impacto real\. /, """") ?? null"
+frontend/src/lib/demo.ts	34	CORRECTA	Identificador reservado o prefijo almacenado usado solo para formato de fixtures conocidos.	"    ? text?.replace(/^DEMO FICTICIA · coordenadas aproximadas y verificación simulada, sin vínculo con organizaciones reales\. /, """")"
+backend/src/ai/groq.rs	53	CORRECTA	Referencia al modelo efectivamente configurado; no se cambió ni se llamó Groq.	"            ""model"": ""deepseek-r1-distill-llama-70b"","
+backend/src/ai/groq.rs	77	CORRECTA	Referencia al modelo efectivamente configurado; no se cambió ni se llamó Groq.	        // DeepSeek-R1 emite etiquetas <think>...</think>, las removemos
+frontend/src/components/dashboard/CeoMetrics.tsx	15	CORRECTA	Texto visible calificado como estimación, sin atribuir resultados reales al fixture.	" return <>{hasDemo && <DemoNotice/>}<StatCards items={[{label:""Donaciones completadas"",value:metrics.delivered_donations,icon:""check""},{label:""CO₂e evitado · estimación (kg)"",value:metrics.estimated_co2_saved_kg.toLocaleString(),icon:""chart""},{label:""Beneficiarios · estimación"",value:metrics.estimated_beneficiaries.toLocaleString(),icon:""users""},{label:""ONG verificadas"",value:metrics.verified_ngos,icon:""shield""}]}/>"
+frontend/src/components/dashboard/CeoMetrics.tsx	16	CORRECTA	Texto visible calificado como estimación, sin atribuir resultados reales al fixture.	" <p className=""notice mb-6"">Estimación: las cifras de CO₂e, volumen y beneficiarios usan los cálculos actuales del sistema. Sus unidades y metodología están pendientes de validación; no representan impacto certificado. Los registros Demo utilizan datos ficticios y no acreditan operaciones ni beneficiarios reales.</p>"

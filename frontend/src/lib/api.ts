@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type UserRole = "empresa" | "ong" | "admin" | "ceo";
 export type DonationState = "en_acopio" | "reservado" | "en_transito" | "entregado" | "rechazado";

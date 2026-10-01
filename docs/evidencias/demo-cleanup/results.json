@@ -1,0 +1,314 @@
+{
+  "api": {
+    "ong": {
+      "shipments": 6,
+      "pending": 1,
+      "ready": 1,
+      "transit": 2,
+      "delivered": 1,
+      "rejected": 1,
+      "available": 8
+    },
+    "empresa": {
+      "shipments": 6,
+      "pending": 1,
+      "ready": 1,
+      "transit": 2,
+      "delivered": 1,
+      "rejected": 1,
+      "active": 6
+    },
+    "admin": {
+      "shipments": 13,
+      "pending": 2,
+      "ready": 2,
+      "transit": 4,
+      "delivered": 3,
+      "rejected": 2
+    },
+    "map": {
+      "ngos": 11,
+      "warehouses": 1
+    }
+  },
+  "views": [
+    {
+      "name": "ong-dashboard",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 14,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "8\n\nDonaciones disponibles",
+        "2\n\nMis solicitudes",
+        "2\n\nEn camino",
+        "1\n\nRecibidas"
+      ]
+    },
+    {
+      "name": "ong-catalog",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 14,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "8\n\nDonaciones disponibles",
+        "2\n\nMis solicitudes",
+        "2\n\nEn camino",
+        "1\n\nRecibidas"
+      ]
+    },
+    {
+      "name": "ong-shipments",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 6,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "ong-map",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 0,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "ong-mobile-dashboard",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 14,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "8\n\nDonaciones disponibles",
+        "2\n\nMis solicitudes",
+        "2\n\nEn camino",
+        "1\n\nRecibidas"
+      ]
+    },
+    {
+      "name": "ong-mobile-shipments",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 6,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "ong-mobile-map",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 0,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "empresa-dashboard",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 8,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "6\n\nDonaciones activas",
+        "1\n\nSolicitudes pendientes",
+        "1\n\nListas para salida",
+        "1\n\nEntregadas"
+      ]
+    },
+    {
+      "name": "empresa-catalog",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 8,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "6\n\nDonaciones activas",
+        "1\n\nSolicitudes pendientes",
+        "1\n\nListas para salida",
+        "1\n\nEntregadas"
+      ]
+    },
+    {
+      "name": "empresa-shipments",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 6,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "empresa-mobile-dashboard",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 8,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "6\n\nDonaciones activas",
+        "1\n\nSolicitudes pendientes",
+        "1\n\nListas para salida",
+        "1\n\nEntregadas"
+      ]
+    },
+    {
+      "name": "empresa-mobile-shipments",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 6,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "empresa-mobile-map",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 0,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "admin-dashboard",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 10,
+      "demoEmailInCards": true,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": true,
+      "stats": [
+        "1\n\nPendientes de verificación",
+        "10\n\nONG verificadas",
+        "11\n\nOrganizaciones registradas"
+      ]
+    },
+    {
+      "name": "admin-mobile-dashboard",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 10,
+      "demoEmailInCards": true,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": [
+        "1\n\nPendientes de verificación",
+        "10\n\nONG verificadas",
+        "11\n\nOrganizaciones registradas"
+      ]
+    },
+    {
+      "name": "admin-mobile-shipments",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 12,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    },
+    {
+      "name": "admin-mobile-map",
+      "badDisclaimer": false,
+      "badNgoDisclaimer": false,
+      "badges": 0,
+      "demoEmailInCards": false,
+      "notice": 1,
+      "overflow": false,
+      "seedButton": false,
+      "stats": []
+    }
+  ],
+  "console_errors": [],
+  "map_markers": [
+    {
+      "title": "Almacén demo",
+      "visible": true
+    },
+    {
+      "title": "r-couary",
+      "visible": true
+    },
+    {
+      "title": "Banco Comunitario Demo Veracruz",
+      "visible": true
+    },
+    {
+      "title": "Fundación Educativa Demo Boca",
+      "visible": true
+    },
+    {
+      "title": "Comedor Social Demo Centro",
+      "visible": true
+    },
+    {
+      "title": "Refugio Comunitario Demo Medellín",
+      "visible": true
+    },
+    {
+      "title": "Asociación Ambiental Demo Puerto",
+      "visible": true
+    },
+    {
+      "title": "Aula Digital Demo Veracruz",
+      "visible": true
+    },
+    {
+      "title": "Red Solidaria Demo Boca",
+      "visible": true
+    },
+    {
+      "title": "Taller Comunitario Demo Medellín",
+      "visible": true
+    },
+    {
+      "title": "Centro Vecinal Demo Puerto",
+      "visible": true
+    },
+    {
+      "title": "Comunidad Demo Centro · pendiente",
+      "visible": true
+    }
+  ],
+  "map_popup": "Banco Comunitario Demo Veracruz\nDemo · Organización\n\nAlimentos, leche, arroz, frijol y productos de limpieza para comedores.",
+  "database_unchanged": true
+}

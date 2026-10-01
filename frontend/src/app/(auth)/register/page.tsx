@@ -24,7 +24,7 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      // 1. Registro en Supabase a través del backend en Rust
+      // 1. Registro en PostgreSQL a través del backend en Rust
       await api.register({ email, password, role });
 
       // 2. Login inmediato para obtener el token JWT

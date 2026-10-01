@@ -95,7 +95,7 @@ async fn register(
 
     let mut tx = state.db.begin().await.map_err(|_| internal_error())?;
 
-    // 2. Insertar en Supabase manejando el conflicto de email duplicado
+    // 2. Insertar en PostgreSQL manejando el conflicto de email duplicado
     let user_record = sqlx::query!(
         r#"
         INSERT INTO users (email, password_hash, role) 

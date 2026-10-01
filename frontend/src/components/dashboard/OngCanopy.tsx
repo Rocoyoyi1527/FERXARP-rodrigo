@@ -1,5 +1,7 @@
 "use client";
 
+import { DemoNotice, DemoBadge } from "@/components/ui/DemoNotice";
+import { isDemoDonation, donationTitle, donationDescription, companyLabel } from "@/lib/demo";
 import { useEffect, useState } from "react";
 import { api, apiErrorMessage, FeedDonationItem, isApiError, ShipmentItem } from "@/lib/api";
 import { StatCards } from "@/components/ui/StatCards";
@@ -84,7 +86,7 @@ export function OngCanopy() {
   }
 
   return (
-    <><StatCards items={[{label:"Donaciones disponibles",value:feed.length},{label:"Mis solicitudes",value:myDonations.filter(d=>d.donation_status==="reservado").length,icon:"users"},{label:"En camino",value:myDonations.filter(d=>d.donation_status==="en_transito").length,icon:"truck"},{label:"Recibidas",value:myDonations.filter(d=>d.donation_status==="entregado").length,icon:"check"}]}/><div id="donaciones" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <>{(feed.some(d => isDemoDonation(d.id)) || myDonations.some(d => isDemoDonation(d.donation_id))) && <DemoNotice/>}<StatCards items={[{label:"Donaciones disponibles",value:feed.length},{label:"Mis solicitudes",value:myDonations.filter(d=>d.donation_status==="reservado").length,icon:"users"},{label:"En camino",value:myDonations.filter(d=>d.donation_status==="en_transito").length,icon:"truck"},{label:"Recibidas",value:myDonations.filter(d=>d.donation_status==="entregado").length,icon:"check"}]}/><div id="donaciones" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {feedbackMsg && (
         <p role="status" className={`lg:col-span-12 rounded-xl border px-3 py-2 text-xs ${feedbackMsg.error ? "border-red-200 text-red-700" : "border-garden-emerald text-garden-sprout"}`}>
           {feedbackMsg.text}
@@ -122,12 +124,12 @@ export function OngCanopy() {
                 >
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-garden-text">{item.title}</h3><StatusBadge status={item.status}/>{item.created_at && <p className="card-meta">Publicado: {new Date(item.created_at).toLocaleDateString("es-MX")}</p>}
+                      <h3 className="text-base font-semibold text-garden-text">{isDemoDonation(item.id) && <DemoBadge/>}{donationTitle(item.id, item.title)}</h3><StatusBadge status={item.status}/>{item.created_at && <p className="card-meta">Publicado: {new Date(item.created_at).toLocaleDateString("es-MX")}</p>}
                       {item.description && (
-                        <p className="text-sm text-garden-sage mt-0.5">{item.description}</p>
+                        <p className="text-sm text-garden-sage mt-0.5">{donationDescription(item.id, item.description)}</p>
                       )}
                       <p className="text-xs font-sans text-garden-sage mt-1">
-                        Empresa: <span className="text-garden-text">{item.donor_email}</span> | Volumen:{" "}
+                        Empresa: <span className="text-garden-text">{companyLabel(item.id, item.donor_email)}</span> | Volumen:{" "}
                         <span className="text-garden-leaf font-bold">{item.quantity}</span> unidades
                       </p>
                     </div>
@@ -179,7 +181,7 @@ export function OngCanopy() {
                 <div key={d.id} className="border border-garden-border bg-garden-dark/80 rounded-xl p-3.5">
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-base font-semibold text-garden-text">{d.title}</h3>{d.description && <p className="card-meta">{d.description}</p>}
+                      <h3 className="text-base font-semibold text-garden-text">{isDemoDonation(d.donation_id) && <DemoBadge/>}{donationTitle(d.donation_id, d.title)}</h3>{d.description && <p className="card-meta">{donationDescription(d.donation_id, d.description)}</p>}
                       <p className="text-sm font-sans text-garden-sage mt-0.5">
                         Cantidad: <span className="text-garden-sprout">{d.quantity}</span> unidades
                       </p>

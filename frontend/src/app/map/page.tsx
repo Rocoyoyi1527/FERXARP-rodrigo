@@ -1,4 +1,6 @@
 "use client";
+import { DemoNotice } from "@/components/ui/DemoNotice";
+import { isDemoNgo } from "@/lib/demo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, apiErrorMessage, isApiError, type MapPoint, type UserClaims } from "@/lib/api";
@@ -79,6 +81,7 @@ export default function MapPage() {
  },[position,ready]);
  return <main className="app-page"><Navbar user={user} activePage="map" onLogout={()=>{localStorage.removeItem("fexarp_token");router.push("/login");}}/><div className="page-content"><header className="page-heading"><div><p className="eyebrow">Cerca de tu comunidad</p><h1>Mapa de organizaciones</h1><p>Vista de referencia: Veracruz. Los puntos corresponden a las coordenadas registradas en la plataforma.</p></div><div className="flex flex-wrap gap-2"><button disabled={!ready||locating} className="btn btn-primary" onClick={()=>void locate()}><Icon name="location"/>{locating?"Obteniendo ubicación...":"Usar mi ubicación"}</button><button disabled={!ready} className="btn btn-secondary" onClick={showReference}>Ver Veracruz</button></div></header>
  {error && <p role="alert" className="notice notice-error">{error}</p>}
+ {points.some(p => isDemoNgo(p.id) || isDemoWarehouse(p)) && <DemoNotice/>}
  <p role="status" className="text-sm text-garden-sage">{locationStatus}</p>
  <div className="map-summary"><span><strong>{points.filter(p=>p.point_type==="acopio").length}</strong> almacenes</span><span><strong>{points.filter(p=>p.point_type==="ong").length}</strong> ONG</span><span><strong>{activeShipments??"No disponible"}</strong> envíos activos visibles para tu cuenta</span></div>
  <div className="map-canvas">{loading && <div className="absolute inset-0 grid place-items-center">Cargando mapa...</div>}<div ref={container} className="h-full w-full" aria-label="Mapa de puntos de acopio y ONG"/></div>

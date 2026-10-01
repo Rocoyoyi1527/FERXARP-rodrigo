@@ -1,5 +1,7 @@
 "use client";
 
+import { DemoNotice, DemoBadge } from "@/components/ui/DemoNotice";
+import { isDemoDonation, donationTitle, donationDescription, companyLabel } from "@/lib/demo";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, apiErrorMessage, isApiError, ShipmentItem, UserClaims } from "@/lib/api";
@@ -88,15 +90,15 @@ export default function ShipmentsPage() {
   const card = (s: ShipmentItem, stage: "pending" | "ready" | "transit" | "finished") => (
     <article key={s.id} className="rounded-xl border border-garden-border bg-garden-dark p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-base font-semibold text-garden-text">{s.title}</h4>
+        <h4 className="text-base font-semibold text-garden-text">{isDemoDonation(s.donation_id) && <DemoBadge/>}{donationTitle(s.donation_id, s.title)}</h4>
         <span className="badge">
           {stage === "pending" ? "Pendiente" : stage === "ready" ? "Aprobada" : stage === "transit" ? "En camino" : s.donation_status === "entregado" ? "Entregada" : "Rechazada"}
         </span>
       </div>
-      {s.description && <p className="card-meta">{s.description}</p>}
+      {s.description && <p className="card-meta">{donationDescription(s.donation_id, s.description)}</p>}
       {s.created_at && <p className="card-meta">Solicitud: {new Date(s.created_at).toLocaleDateString("es-MX")}</p>}
       <p className="text-sm text-garden-sage">{s.quantity} unidades · ONG: <span className="text-garden-leaf">{s.ngo_name}</span></p>
-      <p className="text-xs text-garden-sage">Donante: {s.donor_email}</p>
+      <p className="text-xs text-garden-sage">Empresa: {companyLabel(s.donation_id, s.donor_email)}</p>
       {stage === "pending" && user?.role === "empresa" && (
         <button type="button" disabled={approvingId !== null} onClick={() => void handleApprove(s.donation_id)}
           className="btn btn-primary w-full mt-2">
@@ -144,6 +146,7 @@ export default function ShipmentsPage() {
           <p className="mt-1 text-xs text-garden-sage">La aprobación reserva el destino; la salida inicia el traslado.</p>
         </div></header>
         {notice && <p role="status" className={`rounded-xl border p-3 text-xs ${notice.error ? "border-rose-800 text-red-700" : "border-garden-emerald text-garden-sprout"}`}>{notice.text}</p>}
+        {shipments.some(s => isDemoDonation(s.donation_id)) && <DemoNotice/>}
         <div className="shipment-grid">
           {column("1. Solicitadas", pending, "pending")}
           {column("2. Listas para salida", ready, "ready")}

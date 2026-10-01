@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   experimental: { useTypeScriptCli: false },
   poweredByHeader: false,
+  async rewrites() {
+    const backend = process.env.BACKEND_INTERNAL_URL;
+    return backend ? [
+      { source: "/api/:path*", destination: `${backend}/api/:path*` },
+      { source: "/health", destination: `${backend}/health` },
+    ] : [];
+  },
   async headers() {
     return [{
       source: "/:path*",

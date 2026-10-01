@@ -16,7 +16,7 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
   * Tableros diferenciados por rol:
     * **Empresa:** Formulario de registro de lotes y grafo interactivo de compatibilidad (`GardenGraph.tsx`).
     * **ONG:** Dosel de absorción de lotes disponibles, apartado con un clic y escáner de recepción.
-    * **CEO:** Métricas de sostenibilidad, volumen transferido, beneficiarios directos y $\text{CO}_2\text{e}$ evitado.
+    * **CEO:** Estimaciones de volumen, beneficiarios y $\text{CO}_2\text{e}$; metodología pendiente de validación. Los datos Demo son ficticios y no acreditan impacto.
     * **Admin TI:** Auditoría y verificación oficial de organizaciones para evitar riesgos de corrupción.
   * Control logístico en 4 etapas (`/shipments`): *Solicitadas*, *Listas para salida*, *En camino* y *Finalizadas*.
   * Mapa geoespacial interactivo (`/map`) adaptado con teselas botánicas y rutas de acopio.
@@ -29,7 +29,7 @@ Plataforma integral orientada a canalizar excedentes operativos y alimentarios d
 | :--- | :--- |
 | **Backend** | Rust 2021, Axum, Tokio, SQLx (PostgreSQL), Jsonwebtoken, Reqwest |
 | **Frontend** | Next.js (App Router), React, Tailwind CSS, Leaflet |
-| **Bases de Datos** | Supabase (PostgreSQL relacional) + ChromaDB (Base vectorial) |
+| **Bases de Datos** | PostgreSQL relacional + ChromaDB (Base vectorial) |
 | **Inteligencia Artificial** | Groq LPU (DeepSeek-R1 Distill Llama 70B) + Embeddings Cosine |
 
 ## Backend local desde un checkout limpio

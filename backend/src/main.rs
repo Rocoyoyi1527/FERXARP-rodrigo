@@ -43,14 +43,14 @@ async fn main() {
         .ok()
         .filter(|value| !value.trim().is_empty());
 
-    // 3. Establecer conexión con Supabase (PostgreSQL)
+    // 3. Establecer conexión con PostgreSQL
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await
-        .expect("Error crítico: No se pudo conectar a Supabase");
+        .expect("Error crítico: No se pudo conectar a PostgreSQL");
 
-    info!("Conexión a PostgreSQL (Supabase) establecida exitosamente.");
+    info!("Conexión a PostgreSQL establecida exitosamente.");
 
     // 4. Empaquetar estado compartido
     let shared_state = Arc::new(AppState {
@@ -110,7 +110,7 @@ fn build_router(shared_state: Arc<AppState>) -> Router {
 
 // Endpoint de verificación rápida del servidor
 async fn health_check() -> &'static str {
-    "¡Fexarp API Online! El cerebro en Rust está conectado a Supabase."
+    "¡Fexarp API Online! El cerebro en Rust está conectado a PostgreSQL."
 }
 
 #[cfg(test)]
